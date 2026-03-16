@@ -1,0 +1,136 @@
+{
+  "entities": [
+    {
+      "name": "Air Operations Center",
+      "uuid": "ent-001",
+      "description": "Primary command and control node for coordinating all air operations within the area of responsibility.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "Intelligence Fusion Cell",
+      "uuid": "ent-002",
+      "description": "Aggregates and processes intelligence from multiple sources to support situational awareness.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "Situational Picture",
+      "uuid": "ent-003",
+      "description": "A unified common operating picture of the battlespace derived from multiple sensor feeds.",
+      "type": "OperationalActivity"
+    },
+    {
+      "name": "Target Identification",
+      "uuid": "ent-004",
+      "description": "Process of identifying and classifying potential targets using available intelligence and sensor data.",
+      "type": "OperationalActivity"
+    },
+    {
+      "name": "Strike Package",
+      "uuid": "ent-005",
+      "description": "A coordinated group of aircraft and supporting assets assigned to execute a strike mission.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "ISR Asset",
+      "uuid": "ent-006",
+      "description": "Intelligence, Surveillance, and Reconnaissance asset providing persistent wide-area coverage.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "Comms Relay Node",
+      "uuid": "ent-007",
+      "description": "Provides satellite and line-of-sight communications relay capability.",
+      "type": "ServiceSpecification"
+    },
+    {
+      "name": "Operational Command",
+      "uuid": "ent-008",
+      "description": "The authority and responsibility for directing assigned forces to accomplish military objectives.",
+      "type": "Capability"
+    },
+    {
+      "name": "Air Defence Network",
+      "uuid": "ent-009",
+      "description": "Integrated network of sensors, command nodes, and weapon systems for air defence.",
+      "type": "SystemOfSystems"
+    },
+    {
+      "name": "Sensor Data Link",
+      "uuid": "ent-010",
+      "description": "High-bandwidth data link connecting airborne sensors to ground processing stations.",
+      "type": "OperationalExchange"
+    }
+  ],
+  "relationships": [
+    {
+      "name": "Provides Intelligence To",
+      "uuid": "rel-001",
+      "description": "Intelligence Fusion Cell feeds processed intelligence data to the Air Operations Center.",
+      "source": "ent-002",
+      "target": "ent-001"
+    },
+    {
+      "name": "Generates",
+      "uuid": "rel-002",
+      "description": "The Air Operations Center generates and maintains the situational picture.",
+      "source": "ent-001",
+      "target": "ent-003"
+    },
+    {
+      "name": "Supports",
+      "uuid": "rel-003",
+      "description": "Situational Picture supports Target Identification activities.",
+      "source": "ent-003",
+      "target": "ent-004"
+    },
+    {
+      "name": "Executes",
+      "uuid": "rel-004",
+      "description": "Strike Package executes missions based on target identification outputs.",
+      "source": "ent-005",
+      "target": "ent-004"
+    },
+    {
+      "name": "Collects For",
+      "uuid": "rel-005",
+      "description": "ISR Asset collects raw intelligence for the Intelligence Fusion Cell.",
+      "source": "ent-006",
+      "target": "ent-002"
+    },
+    {
+      "name": "Routes Through",
+      "uuid": "rel-006",
+      "description": "Sensor data is routed through the Communications Relay Node.",
+      "source": "ent-006",
+      "target": "ent-007"
+    },
+    {
+      "name": "Commands",
+      "uuid": "rel-007",
+      "description": "Air Operations Center commands Strike Package during mission execution.",
+      "source": "ent-001",
+      "target": "ent-005"
+    },
+    {
+      "name": "Integrates With",
+      "uuid": "rel-008",
+      "description": "Air Defence Network integrates with Air Operations Center for shared picture.",
+      "source": "ent-009",
+      "target": "ent-001"
+    },
+    {
+      "name": "Carries",
+      "uuid": "rel-009",
+      "description": "The Sensor Data Link carries raw sensor feeds from ISR Assets.",
+      "source": "ent-010",
+      "target": "ent-006"
+    },
+    {
+      "name": "Enables",
+      "uuid": "rel-010",
+      "description": "Operational Command capability enables the Air Operations Center mandate.",
+      "source": "ent-008",
+      "target": "ent-001"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+# ─── MBSE Explorer — .dockerignore ───────────────────────────────────────────
+#
+# Placed at the repo root because `docker build` is run from there:
+#
+#   docker build -f frontend/Dockerfile -t mbse-explorer .
+#
+# Only frontend/ and resources/ are needed by the Dockerfile.
+# Everything else is excluded to keep the build context small and fast.
+
+# ── Version control ───────────────────────────────────────────────────────────
+.git
+.gitignore
+.gitmodules
+
+# ── Node artefacts ────────────────────────────────────────────────────────────
+frontend/node_modules
+frontend/dist
+frontend/dist-ssr
+
+# ── Dev / editor noise ────────────────────────────────────────────────────────
+**/.DS_Store
+**/*.local
+**/*.log
+.vscode
+.idea
+*.suo
+*.sw?
+
+# ── Nix build system (not needed in Docker) ───────────────────────────────────
+flake.nix
+flake.lock
+.opencode
+
+# ── Unrelated services ────────────────────────────────────────────────────────
+# The backend and agency directories are separate services with their own
+# images; exclude them to avoid unnecessary context transfer.
+backend
+agency
