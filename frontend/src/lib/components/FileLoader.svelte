@@ -116,6 +116,7 @@
                 Import MBSE entities and relationships
             </Dialog.Description>
         </Dialog.Header>
+
         <div class="space-y-4">
             <button
                 type="button"
@@ -201,16 +202,20 @@
                     <Button variant="outline" onclick={handleCreateNew}>
                         NEW PROJECT
                     </Button>
-                    <Button
-                        onclick={handleLoad}
-                        class="bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30"
-                    >
-                        LOAD DATA
-                    </Button>
+                    <Dialog.Close>
+                        <Button
+                            onclick={handleLoad}
+                            class="bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30"
+                        >
+                            LOAD DATA
+                        </Button>
+                    </Dialog.Close>
                 {:else}
-                    <Button variant="outline" onclick={handleClose}>
-                        CANCEL
-                    </Button>
+                    <Dialog.Close>
+                        <Button variant="outline" onclick={handleClose}>
+                            CANCEL
+                        </Button>
+                    </Dialog.Close>
                     <Button
                         onclick={handleCreateNew}
                         class="bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30"
