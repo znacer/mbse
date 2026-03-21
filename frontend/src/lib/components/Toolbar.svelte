@@ -11,7 +11,7 @@
         Save,
         Download,
         Upload,
-        Home,
+        House,
         FolderOpen,
         GitBranch,
         ArrowDown,
@@ -155,7 +155,7 @@
 </script>
 
 <header
-    class="flex items-center justify-between px-4 py-2 border-b border-[#1a2530] bg-[#0d1318]"
+    class="flex items-center justify-between px-4 py-2 border-b border bg-muted"
 >
     <div class="flex items-center gap-4">
         <Button
@@ -163,58 +163,56 @@
             size="icon"
             onclick={goToHome}
             aria-label="Home"
-            class="text-[#00ff88] hover:text-[#00ff88] hover:bg-[#00ff88]/10"
         >
-            <Home class="size-4" />
+            <House class="size-4" />
         </Button>
         <Button
             variant="ghost"
             size="icon"
             onclick={goToProjects}
             aria-label="Projects"
-            class="text-[#00ff88] hover:text-[#00ff88] hover:bg-[#00ff88]/10"
         >
             <FolderOpen class="size-4" />
         </Button>
 
-        <Separator orientation="vertical" class="h-6 bg-[#1a2530]" />
+        <Separator orientation="vertical" class="h-6 bg-secondary" />
 
         {#if appState.currentProject}
-            <span class="text-sm font-medium text-[#e0e0e0] font-mono"
-                >{appState.currentProject.name}</span
-            >
+            <span class="text-sm font-medium text font-mono">
+                {appState.currentProject.name}
+            </span>
         {:else}
-            <span class="text-sm text-[#4a5568] font-mono">NO PROJECT</span>
+            <span class="text-sm text font-mono">NO PROJECT</span>
         {/if}
     </div>
 
     <div class="flex items-center gap-2">
         <div class="relative">
             <Search
-                class="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-[#00ff88]/50 z-10"
+                class="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-primary/50 z-10"
             />
             <Input
                 type="search"
-                placeholder="SEARCH NODES..."
+                placeholder="Search nodes..."
                 value={localSearchQuery}
                 oninput={handleSearchInput}
                 onkeydown={handleSearchKeydown}
                 onblur={handleBlur}
                 onfocus={handleFocus}
-                class="w-64 pl-8 bg-[#0a0f14] border-[#1a2530] text-[#e0e0e0] placeholder:text-[#4a5568] font-mono text-xs focus:border-[#00ff88]/50"
+                class="w-64 pl-8 "
             />
             {#if showSuggestions && appState.searchSuggestions.length > 0}
                 <div
-                    class="absolute top-full left-0 right-0 mt-1 bg-[#0a0f14] border border-[#1a2530] rounded-md shadow-lg z-20 max-h-60 overflow-auto"
+                    class="absolute top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg z-20 max-h-60 overflow-auto"
                 >
                     {#each appState.searchSuggestions as node (node.id)}
                         <button
                             type="button"
-                            class="w-full px-3 py-2 text-left text-xs font-mono text-[#e0e0e0] hover:bg-[#00ff88]/10 hover:text-[#00ff88] transition-colors border-b border-[#1a2530] last:border-b-0"
+                            class="w-full px-3 py-2 text-left text-xs font-mono text hover:bg-primary/10 hover:text-primary transition-colors border-b border last:border-b-0"
                             onclick={() => selectSuggestion(node)}
                         >
                             <div class="font-medium">{node.name}</div>
-                            <div class="text-[#4a5568] truncate">
+                            <div class="text-secondary truncate">
                                 {node.type}{node.description
                                     ? ` - ${node.description}`
                                     : ""}
@@ -225,7 +223,7 @@
             {/if}
         </div>
 
-        <span class="text-xs text-[#00ff88]/70 font-mono">
+        <span class="text-xs text-primary/70 font-mono">
             {nodeCount} NODES / {linkCount} LINKS
         </span>
     </div>
@@ -236,7 +234,6 @@
             size="icon"
             onclick={handleReset}
             aria-label="Reset view"
-            class="border-[#1a2530] text-[#00ff88] hover:text-[#00ff88] hover:bg-[#00ff88]/10 hover:border-[#00ff88]/30"
         >
             <RotateCcw class="size-4" />
         </Button>
@@ -246,7 +243,6 @@
                 size="icon"
                 onclick={() => (showLayoutMenu = !showLayoutMenu)}
                 aria-label="Layout mode"
-                class="border-[#1a2530] text-[#00ff88] hover:text-[#00ff88] hover:bg-[#00ff88]/10 hover:border-[#00ff88]/30"
             >
                 <GitBranch class="size-4" />
             </Button>
@@ -257,9 +253,9 @@
                     {#each layoutOptions as option (option.mode)}
                         <button
                             type="button"
-                            class="w-full px-3 py-2 text-left text-xs font-mono text-[#e0e0e0] hover:bg-[#00ff88]/10 hover:text-[#00ff88] transition-colors flex items-center gap-2 {appState.layoutMode ===
+                            class="w-full px-3 py-2 text-left text-xs font-mono text hover:bg-primary/10 hover:text-primary transition-colors flex items-center gap-2 {appState.layoutMode ===
                             option.mode
-                                ? 'text-[#00ff88] bg-[#00ff88]/5'
+                                ? 'text-primary bg-primary/5'
                                 : ''}"
                             onclick={() => setLayoutMode(option.mode)}
                         >
@@ -281,7 +277,6 @@
             size="icon"
             onclick={() => (showFileLoader = true)}
             aria-label="Load file"
-            class="border-[#1a2530] text-[#00ff88] hover:text-[#00ff88] hover:bg-[#00ff88]/10 hover:border-[#00ff88]/30"
         >
             <Upload class="size-4" />
         </Button>
@@ -291,7 +286,6 @@
             onclick={handleSave}
             aria-label="Save"
             disabled={!appState.currentProject}
-            class="border-[#1a2530] text-[#00ff88] hover:text-[#00ff88] hover:bg-[#00ff88]/10 hover:border-[#00ff88]/30 disabled:opacity-30"
         >
             <Save class="size-4" />
         </Button>
@@ -301,7 +295,6 @@
             onclick={handleExport}
             aria-label="Export"
             disabled={!appState.currentProject}
-            class="border-[#1a2530] text-[#00ff88] hover:text-[#00ff88] hover:bg-[#00ff88]/10 hover:border-[#00ff88]/30 disabled:opacity-30"
         >
             <Download class="size-4" />
         </Button>
