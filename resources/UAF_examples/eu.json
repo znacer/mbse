@@ -1,0 +1,202 @@
+{
+  "entities": [
+    {
+      "name": "European Council",
+      "uuid": "eu-ent-001",
+      "description": "Strategic body composed of heads of state or government. Defines the general political direction and long-term priorities of the EU.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "European Commission",
+      "uuid": "eu-ent-002",
+      "description": "Politically independent executive arm. Holds the monopoly on legislative initiative, executes the budget, and acts as guardian of the treaties.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "European Parliament",
+      "uuid": "eu-ent-003",
+      "description": "Directly elected democratic body. Acts as a co-legislator, sharing the power to adopt and amend legislative proposals and the EU budget.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "Council of the European Union",
+      "uuid": "eu-ent-004",
+      "description": "Intergovernmental body composed of national ministers. Shares legislative and budgetary authority with the Parliament.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "Court of Justice of the European Union (CJEU)",
+      "uuid": "eu-ent-005",
+      "description": "Supreme judicial authority. Ensures that EU legislation is interpreted and applied uniformly across all national legal systems.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "European Central Bank (ECB)",
+      "uuid": "eu-ent-006",
+      "description": "Central monetary authority for the Eurozone. Manages the euro, frames economic policy, and ensures price stability.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "European Court of Auditors",
+      "uuid": "eu-ent-007",
+      "description": "Independent assessment body that audits the revenue, expenditure, and financial management of the EU budget.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "Conciliation Committee",
+      "uuid": "eu-ent-008",
+      "description": "Ad-hoc body comprising equal representatives from the Council and Parliament, tasked with drafting a joint text when co-legislators disagree.",
+      "type": "OperationalPerformer"
+    },
+    {
+      "name": "Decentralized EU Agencies",
+      "uuid": "eu-ent-009",
+      "description": "Network of over 30 agencies providing specialized regulatory, technical, and scientific services to institutions and member states.",
+      "type": "ServiceProvider"
+    },
+    {
+      "name": "Legislative Initiation and Executive Management",
+      "uuid": "eu-ent-010",
+      "description": "Capability to translate strategic goals into actionable policy, propose laws, and ensure uniform implementation.",
+      "type": "Capability"
+    },
+    {
+      "name": "Democratic Co-Legislation",
+      "uuid": "eu-ent-011",
+      "description": "Capability to represent both the direct will of citizens and sovereign interests of member states in the creation of binding law.",
+      "type": "Capability"
+    },
+    {
+      "name": "Judicial Arbitration and Enforcement",
+      "uuid": "eu-ent-012",
+      "description": "Capability to ensure that EU law is interpreted and applied uniformly across all 27 distinct national legal systems.",
+      "type": "Capability"
+    },
+    {
+      "name": "Monetary Stability Management",
+      "uuid": "eu-ent-013",
+      "description": "Capability to manage monetary policy, maintain the stability of the Euro, and oversee banking supervision.",
+      "type": "Capability"
+    },
+    {
+      "name": "Ordinary Legislative Procedure (OLP)",
+      "uuid": "eu-ent-014",
+      "description": "Default process for adopting EU legislation, involving multiple readings and iterative negotiations between co-legislators.",
+      "type": "OperationalActivity"
+    }
+  ],
+  "relationships": [
+    {
+      "name": "Issues Strategic Mandates To",
+      "uuid": "eu-rel-001",
+      "description": "The European Council issues strategic guidelines and political direction to the European Commission.",
+      "source": "eu-ent-001",
+      "target": "eu-ent-002"
+    },
+    {
+      "name": "Initiates Activity",
+      "uuid": "eu-rel-002",
+      "description": "The European Commission triggers the Ordinary Legislative Procedure by drafting a legislative proposal.",
+      "source": "eu-ent-002",
+      "target": "eu-ent-014"
+    },
+    {
+      "name": "Submits Proposal To",
+      "uuid": "eu-rel-003",
+      "description": "The European Commission formally transmits legislative proposals to the European Parliament.",
+      "source": "eu-ent-002",
+      "target": "eu-ent-003"
+    },
+    {
+      "name": "Submits Proposal To",
+      "uuid": "eu-rel-004",
+      "description": "The European Commission formally transmits legislative proposals to the Council of the European Union.",
+      "source": "eu-ent-002",
+      "target": "eu-ent-004"
+    },
+    {
+      "name": "Exercises Political Control Over",
+      "uuid": "eu-rel-005",
+      "description": "The European Parliament holds the Commission accountable and possesses the power to pass a motion of censure.",
+      "source": "eu-ent-003",
+      "target": "eu-ent-002"
+    },
+    {
+      "name": "Co-Legislates With",
+      "uuid": "eu-rel-006",
+      "description": "The European Parliament transmits its first/second reading positions and amendments to the Council of the EU.",
+      "source": "eu-ent-003",
+      "target": "eu-ent-004"
+    },
+    {
+      "name": "Co-Legislates With",
+      "uuid": "eu-rel-007",
+      "description": "The Council of the EU transmits its first/second reading positions and counter-proposals to the European Parliament.",
+      "source": "eu-ent-004",
+      "target": "eu-ent-003"
+    },
+    {
+      "name": "Mediates",
+      "uuid": "eu-rel-008",
+      "description": "The European Commission acts as a mediator within the Conciliation Committee to reconcile diverging positions.",
+      "source": "eu-ent-002",
+      "target": "eu-ent-008"
+    },
+    {
+      "name": "Provides Audit Reports To",
+      "uuid": "eu-rel-009",
+      "description": "The Court of Auditors provides financial assessments to the Parliament for the annual budget discharge procedure.",
+      "source": "eu-ent-007",
+      "target": "eu-ent-003"
+    },
+    {
+      "name": "Enforces Constraints On",
+      "uuid": "eu-rel-010",
+      "description": "The CJEU acts as the ultimate arbiter, adjudicating legal disputes involving the Commission, Parliament, and Member States.",
+      "source": "eu-ent-005",
+      "target": "eu-ent-002"
+    },
+    {
+      "name": "Provides Specialized Services To",
+      "uuid": "eu-rel-011",
+      "description": "EU Agencies provide regulatory and scientific services to support the European Commission's executive functions.",
+      "source": "eu-ent-009",
+      "target": "eu-ent-002"
+    },
+    {
+      "name": "Exhibits Capability",
+      "uuid": "eu-rel-012",
+      "description": "The European Commission exhibits the capability of Legislative Initiation and Executive Management.",
+      "source": "eu-ent-002",
+      "target": "eu-ent-010"
+    },
+    {
+      "name": "Exhibits Capability",
+      "uuid": "eu-rel-013",
+      "description": "The European Parliament exhibits the capability of Democratic Co-Legislation.",
+      "source": "eu-ent-003",
+      "target": "eu-ent-011"
+    },
+    {
+      "name": "Exhibits Capability",
+      "uuid": "eu-rel-014",
+      "description": "The Council of the European Union exhibits the capability of Democratic Co-Legislation.",
+      "source": "eu-ent-004",
+      "target": "eu-ent-011"
+    },
+    {
+      "name": "Exhibits Capability",
+      "uuid": "eu-rel-015",
+      "description": "The CJEU exhibits the capability of Judicial Arbitration and Enforcement.",
+      "source": "eu-ent-005",
+      "target": "eu-ent-012"
+    },
+    {
+      "name": "Exhibits Capability",
+      "uuid": "eu-rel-016",
+      "description": "The European Central Bank exhibits the capability of Monetary Stability Management.",
+      "source": "eu-ent-006",
+      "target": "eu-ent-013"
+    }
+  ]
+}
