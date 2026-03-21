@@ -6,12 +6,12 @@
 		ref = $bindable(null),
 		class: className,
 		...restProps
-	}: SheetPrimitive.TitleProps = $props();
+	}: SheetPrimitive.OverlayProps = $props();
 </script>
 
-<SheetPrimitive.Title
+<SheetPrimitive.Overlay
 	bind:ref
-	data-slot="sheet-title"
-	class={cn("text-foreground text-base font-medium", className)}
+	data-slot="sheet-overlay"
+	class={cn("bg-black/10 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 z-50", className)}
 	{...restProps}
 />

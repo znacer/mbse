@@ -272,14 +272,15 @@
                 </div>
             {/if}
         </div>
-        <Button
+        <!-- <Button
             variant="outline"
             size="icon"
             onclick={() => (showFileLoader = true)}
             aria-label="Load file"
         >
             <Upload class="size-4" />
-        </Button>
+        </Button> -->
+        <FileLoader />
         <Button
             variant="outline"
             size="icon"
@@ -301,4 +302,4 @@
     </div>
 </header>
 
-<FileLoader bind:open={showFileLoader} />
+<!-- <FileLoader bind:open={showFileLoader} /> -->

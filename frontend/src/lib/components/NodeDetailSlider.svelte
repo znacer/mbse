@@ -1,12 +1,6 @@
 <script lang="ts">
     import * as d3 from "d3";
-    import {
-        Sheet,
-        SheetHeader,
-        SheetTitle,
-        SheetDescription,
-        SheetContent,
-    } from "$lib/components/ui/sheet/index.js";
+    import * as Drawer from "$lib/components/ui/drawer/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
@@ -222,17 +216,22 @@
     </div>
 {/if}
 
-<Sheet open={appState.isDetailOpen} onClose={handleClose}>
-    <SheetHeader class="flex flex-row items-center justify-between border-b">
-        <div>
-            <SheetTitle class="text-primary font-mono text-sm">
+<!-- <Sheet open={appState.isDetailOpen} onClose={handleClose}> -->
+<Drawer.Root
+    open={appState.isDetailOpen}
+    onOpenChange={handleClose}
+    direction="right"
+>
+    <Drawer.Content>
+        <Drawer.Header>
+            <Drawer.Title class="text-primary font-mono text-sm">
                 {#if appState.selectedNode}
                     {appState.selectedNode.name}
                 {:else if appState.selectedLink}
                     {appState.selectedLink.name}
                 {/if}
-            </SheetTitle>
-            <SheetDescription
+            </Drawer.Title>
+            <Drawer.Description
                 class="text-secondary font-mono text-xs uppercase"
             >
                 {#if appState.selectedNode}
@@ -240,19 +239,9 @@
                 {:else if appState.selectedLink}
                     Relationship Data
                 {/if}
-            </SheetDescription>
-        </div>
-        <Button
-            variant="ghost"
-            size="icon"
-            onclick={handleClose}
-            class="text-primary hover:text-primary hover:bg-primary/10"
-        >
-            <X class="size-4" />
-        </Button>
-    </SheetHeader>
+            </Drawer.Description>
+        </Drawer.Header>
 
-    <SheetContent class=" border-l border">
         <ScrollArea class="h-full p-4">
             {#if appState.selectedNode}
                 {#if networkData.nodes.length > 0}
@@ -580,5 +569,5 @@
                 </div>
             {/if}
         </ScrollArea>
-    </SheetContent>
-</Sheet>
+    </Drawer.Content>
+</Drawer.Root>

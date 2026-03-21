@@ -1,25 +1,43 @@
 <script lang="ts">
-	import { cn } from "$lib/utils.js";
-	import type { Snippet, Component } from "svelte";
-	import type { HTMLAttributes } from "svelte/elements";
+	import { ScrollArea as ScrollAreaPrimitive } from "bits-ui";
+	import { Scrollbar } from "./index.js";
+	import { cn, type WithoutChild } from "$lib/utils.js";
 
-	interface ScrollAreaProps extends HTMLAttributes<HTMLDivElement> {
-		children?: Snippet;
-		orientation?: "vertical" | "horizontal" | "both";
-	}
-
-	let { class: className, children, orientation = "vertical", ...restProps }: ScrollAreaProps = $props();
+	let {
+		ref = $bindable(null),
+		viewportRef = $bindable(null),
+		class: className,
+		orientation = "vertical",
+		scrollbarXClasses = "",
+		scrollbarYClasses = "",
+		children,
+		...restProps
+	}: WithoutChild<ScrollAreaPrimitive.RootProps> & {
+		orientation?: "vertical" | "horizontal" | "both" | undefined;
+		scrollbarXClasses?: string | undefined;
+		scrollbarYClasses?: string | undefined;
+		viewportRef?: HTMLElement | null;
+	} = $props();
 </script>
 
-<div
-	class={cn(
-		"relative",
-		orientation === "vertical" && "overflow-y-auto",
-		orientation === "horizontal" && "overflow-x-auto",
-		orientation === "both" && "overflow-auto",
-		className
-	)}
+<ScrollAreaPrimitive.Root
+	bind:ref
+	data-slot="scroll-area"
+	class={cn("relative", className)}
 	{...restProps}
 >
-	{@render children?.()}
-</div>
+	<ScrollAreaPrimitive.Viewport
+		bind:ref={viewportRef}
+		data-slot="scroll-area-viewport"
+		class="cn-scroll-area-viewport focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
+	>
+		{@render children?.()}
+	</ScrollAreaPrimitive.Viewport>
+	{#if orientation === "vertical" || orientation === "both"}
+		<Scrollbar orientation="vertical" class={scrollbarYClasses} />
+	{/if}
+	{#if orientation === "horizontal" || orientation === "both"}
+		<Scrollbar orientation="horizontal" class={scrollbarXClasses} />
+	{/if}
+	<ScrollAreaPrimitive.Corner />
+</ScrollAreaPrimitive.Root>

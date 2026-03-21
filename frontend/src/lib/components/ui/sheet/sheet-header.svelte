@@ -1,15 +1,20 @@
 <script lang="ts">
-	import { cn } from "$lib/utils.js";
-	import type { Snippet } from "svelte";
 	import type { HTMLAttributes } from "svelte/elements";
+	import { cn, type WithElementRef } from "$lib/utils.js";
 
-	interface SheetHeaderProps extends HTMLAttributes<HTMLDivElement> {
-		children?: Snippet;
-	}
-
-	let { class: className, children, ...restProps }: SheetHeaderProps = $props();
+	let {
+		ref = $bindable(null),
+		class: className,
+		children,
+		...restProps
+	}: WithElementRef<HTMLAttributes<HTMLDivElement>> = $props();
 </script>
 
-<div class={cn("flex flex-col space-y-2 text-center sm:text-left", className)} {...restProps}>
+<div
+	bind:this={ref}
+	data-slot="sheet-header"
+	class={cn("gap-0.5 p-4 flex flex-col", className)}
+	{...restProps}
+>
 	{@render children?.()}
 </div>
