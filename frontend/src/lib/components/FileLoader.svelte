@@ -1,175 +1,172 @@
 <script lang="ts">
-    import { Upload, FileJson, AlertCircle, FlaskConical } from "lucide-svelte";
-    import { parseMBSEFile } from "$lib/utils/graphTransform";
-    import DevGenerateModal from "$lib/components/DevGenerateModal.svelte";
+	import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogContent } from "$lib/components/ui/dialog/index.js";
+	import { Button } from "$lib/components/ui/button/index.js";
+	import { Input } from "$lib/components/ui/input/index.js";
+	import { appState } from "$lib/state/app.svelte.js";
+	import { validateMBSEData, createEmptyMBSEData } from "$lib/utils/graphTransform.js";
+	import type { MBSEData } from "$lib/types/mbse.js";
+	import { Upload, FileJson, X } from "lucide-svelte";
 
-    interface Props {
-        onfileloaded: (raw: unknown, name: string) => void;
-    }
-    let { onfileloaded }: Props = $props();
+	interface FileLoaderProps {
+		open: boolean;
+	}
 
-    let isDragging = $state(false);
-    let error = $state<string | null>(null);
-    let inputEl: HTMLInputElement;
-    let showDevModal = $state(false);
+	let { open = $bindable() }: FileLoaderProps = $props();
 
-    function processFile(file: File) {
-        error = null;
-        if (!file.name.endsWith(".json")) {
-            error = "Please provide a .json file.";
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const raw = JSON.parse(e.target?.result as string);
-                parseMBSEFile(raw); // validates shape; throws on error
-                onfileloaded(raw, file.name);
-            } catch (err) {
-                error =
-                    err instanceof Error ? err.message : "Invalid JSON file.";
-            }
-        };
-        reader.onerror = () => {
-            error = "Could not read the file.";
-        };
-        reader.readAsText(file);
-    }
+	let projectName = $state("");
+	let projectDescription = $state("");
+	let loadedData: MBSEData | null = $state(null);
+	let fileName = $state("");
+	let error = $state<string | null>(null);
+	let fileInput: HTMLInputElement;
 
-    function onDragOver(e: DragEvent) {
-        e.preventDefault();
-        isDragging = true;
-    }
-    function onDragLeave(e: DragEvent) {
-        e.preventDefault();
-        isDragging = false;
-    }
-    function onDrop(e: DragEvent) {
-        e.preventDefault();
-        isDragging = false;
-        const file = e.dataTransfer?.files[0];
-        if (file) processFile(file);
-    }
-    function onInputChange(e: Event) {
-        const file = (e.target as HTMLInputElement).files?.[0];
-        if (file) processFile(file);
-        (e.target as HTMLInputElement).value = "";
-    }
-    function onKeyDown(e: KeyboardEvent) {
-        if (e.key === "Enter" || e.key === " ") inputEl?.click();
-    }
+	function handleClose(): void {
+		open = false;
+		resetForm();
+	}
+
+	function resetForm(): void {
+		projectName = "";
+		projectDescription = "";
+		loadedData = null;
+		fileName = "";
+		error = null;
+	}
+
+	async function handleFileSelect(e: Event): Promise<void> {
+		const target = e.target as HTMLInputElement;
+		const file = target.files?.[0];
+		if (!file) return;
+
+		fileName = file.name;
+
+		try {
+			const text = await file.text();
+			const data = JSON.parse(text);
+
+			if (validateMBSEData(data)) {
+				loadedData = data;
+				error = null;
+				projectName = file.name.replace(/\.json$/i, "");
+			} else {
+				error = "Invalid MBSE file format. Please ensure the file contains valid entities and relationships.";
+				loadedData = null;
+			}
+		} catch (e) {
+			error = "Failed to parse JSON file. Please ensure the file is valid JSON.";
+			loadedData = null;
+		}
+	}
+
+	function handleDrop(e: DragEvent): void {
+		e.preventDefault();
+		const file = e.dataTransfer?.files[0];
+		if (file) {
+			const input = { target: { files: [file] } } as unknown as Event;
+			handleFileSelect(input);
+		}
+	}
+
+	function handleDragOver(e: DragEvent): void {
+		e.preventDefault();
+	}
+
+	function handleLoad(): void {
+		if (!loadedData) return;
+
+		const project = appState.createProject(projectName || fileName.replace(/\.json$/i, ""), projectDescription);
+		appState.loadProject(project.id);
+		appState.setGraphData(loadedData);
+
+		handleClose();
+	}
+
+	function handleCreateNew(): void {
+		const project = appState.createProject(projectName || "New Project", projectDescription);
+		appState.loadProject(project.id);
+		appState.setGraphData(createEmptyMBSEData());
+
+		handleClose();
+	}
 </script>
 
-<div
-    class="flex flex-col items-center justify-center h-full w-full p-8 bg-gray-950"
->
-    <!-- Title -->
-    <div class="mb-8 text-center">
-        <h1 class="text-3xl font-bold text-white tracking-tight">
-            MBSE Explorer
-        </h1>
-        <p class="mt-2 text-gray-400 text-sm">
-            Visualise and explore a Model-Based Systems Engineering file as an
-            interactive network graph.
-        </p>
-    </div>
+<Dialog {open} onClose={handleClose}>
+	<DialogHeader class="bg-[#0d1318] border-b border-[#1a2530]">
+		<DialogTitle class="text-[#00ff88] font-mono text-sm">LOAD DATA</DialogTitle>
+		<DialogDescription class="text-[#4a5568] font-mono text-xs uppercase">
+			Import MBSE entities and relationships
+		</DialogDescription>
+	</DialogHeader>
 
-    <!-- Drop zone -->
-    <div
-        class={[
-            "relative flex flex-col items-center justify-center gap-4",
-            "w-full max-w-lg rounded-2xl border-2 border-dashed p-12 cursor-pointer",
-            "transition-all duration-200",
-            isDragging
-                ? "border-blue-400 bg-blue-950/40 scale-[1.02]"
-                : "border-gray-700 bg-gray-900 hover:border-gray-500 hover:bg-gray-800/60",
-        ].join(" ")}
-        role="button"
-        tabindex="0"
-        aria-label="Load MBSE JSON file"
-        ondragover={onDragOver}
-        ondragleave={onDragLeave}
-        ondrop={onDrop}
-        onclick={() => inputEl?.click()}
-        onkeydown={onKeyDown}
-    >
-        <input
-            bind:this={inputEl}
-            type="file"
-            accept=".json,application/json"
-            class="sr-only"
-            onchange={onInputChange}
-        />
+	<DialogContent class="bg-[#0a0f14] border-[#1a2530]">
+		<div class="space-y-4">
+			<button
+				type="button"
+				class="border-2 border-dashed border-[#1a2530] rounded p-8 text-center cursor-pointer hover:border-[#00ff88]/50 transition-colors w-full bg-[#0d1318]/50"
+				ondrop={handleDrop}
+				ondragover={handleDragOver}
+				onclick={() => fileInput?.click()}
+			>
+				<Upload class="size-8 mx-auto mb-2 text-[#00ff88]/50" />
+				<p class="text-sm text-[#4a5568] font-mono">
+					DROP ZONE - CLICK TO BROWSE
+				</p>
+				<input
+					type="file"
+					accept=".json"
+					bind:this={fileInput}
+					onchange={handleFileSelect}
+					class="hidden"
+				/>
+			</button>
 
-        <!-- Icon -->
-        <div
-            class={[
-                "rounded-full p-4 transition-colors duration-200",
-                isDragging ? "bg-blue-500/20" : "bg-gray-800",
-            ].join(" ")}
-        >
-            {#if isDragging}
-                <FileJson class="h-10 w-10 text-blue-400" />
-            {:else}
-                <Upload class="h-10 w-10 text-gray-400" />
-            {/if}
-        </div>
+			{#if fileName}
+				<div class="flex items-center gap-2 p-2 bg-[#0d1318] rounded border border-[#1a2530]">
+					<FileJson class="size-4 text-[#00ff88]" />
+					<span class="text-sm flex-1 truncate text-[#e0e0e0] font-mono">{fileName}</span>
+					<Button variant="ghost" size="icon-xs" onclick={() => { fileName = ""; loadedData = null; }} class="text-[#00ff88] hover:text-[#00ff88] hover:bg-[#00ff88]/10">
+						<X class="size-3" />
+					</Button>
+				</div>
+			{/if}
 
-        <!-- Text -->
-        {#if isDragging}
-            <p class="text-blue-300 font-medium text-lg">Drop your file here</p>
-        {:else}
-            <p class="text-gray-200 font-medium text-base">
-                Drop your MBSE JSON file here
-            </p>
-            <p class="text-gray-500 text-sm">
-                or <span class="text-blue-400 underline underline-offset-2"
-                    >click to browse</span
-                >
-            </p>
-        {/if}
+			{#if error}
+				<p class="text-sm text-red-500 font-mono">{error}</p>
+			{/if}
 
-        <!-- Schema hint -->
-        <div
-            class="mt-2 rounded-lg bg-gray-800/80 px-4 py-3 text-xs text-gray-400 font-mono w-full max-w-xs text-center"
-        >
-            <span class="text-gray-500">&#123; </span>
-            <span class="text-blue-300">entities</span>
-            <span class="text-gray-500">: […], </span>
-            <span class="text-green-300">relationships</span>
-            <span class="text-gray-500">: […] &#125;</span>
-        </div>
-    </div>
-    <!-- Dev: Generate mock data -->
-    <div
-        class="relative flex flex-col items-center justify-center gap-4 w-full max-w-lg p-12 cursor-pointer transition-all duration-200"
-    >
-        <button
-            onclick={() => (showDevModal = true)}
-            class="flex items-center gap-1.5 rounded-lg bg-yellow-600/15 border border-yellow-600/40 px-3 py-1.5 text-xs text-yellow-400 hover:bg-yellow-600/25 hover:border-yellow-500/60 hover:text-yellow-300 transition-colors"
-            aria-label="Generate mock MBSE data (dev only)"
-            title="Generate mock MBSE data (dev only)"
-        >
-            <FlaskConical class="h-3.5 w-3.5" />
-            <span class="hidden sm:inline">Generate</span>
-        </button>
+			{#if loadedData}
+				<div class="space-y-2">
+					<label for="project-name" class="text-xs font-medium text-[#00ff88]/70 font-mono uppercase">Project Name</label>
+					<Input id="project-name" bind:value={projectName} placeholder="Enter project name" class="bg-[#0d1318] border-[#1a2530] text-[#e0e0e0] font-mono focus:border-[#00ff88]/50" />
+				</div>
 
-        {#if showDevModal}
-            <DevGenerateModal
-                onclose={() => {
-                    showDevModal = false;
-                }}
-            />
-        {/if}
-    </div>
-    <!-- Error -->
-    {#if error}
-        <div
-            class="mt-4 flex items-start gap-2 rounded-lg bg-red-950/60 border border-red-800 px-4 py-3 text-sm text-red-300 max-w-lg w-full"
-            role="alert"
-        >
-            <AlertCircle class="h-4 w-4 mt-0.5 shrink-0" />
-            <span>{error}</span>
-        </div>
-    {/if}
-</div>
+				<div class="space-y-2">
+					<label for="project-desc" class="text-xs font-medium text-[#00ff88]/70 font-mono uppercase">Description</label>
+					<Input id="project-desc" bind:value={projectDescription} placeholder="Enter description" class="bg-[#0d1318] border-[#1a2530] text-[#e0e0e0] font-mono focus:border-[#00ff88]/50" />
+				</div>
+
+				<p class="text-xs text-[#00ff88]/50 font-mono">
+					DETECTED: {loadedData.entities.length} ENTITIES / {loadedData.relationships.length} RELATIONSHIPS
+				</p>
+			{/if}
+
+			<div class="flex justify-end gap-2 pt-4">
+				{#if loadedData}
+					<Button variant="outline" onclick={handleCreateNew} class="border-[#1a2530] text-[#00ff88] hover:text-[#00ff88] hover:bg-[#00ff88]/10 hover:border-[#00ff88]/30">
+						NEW PROJECT
+					</Button>
+					<Button onclick={handleLoad} class="bg-[#00ff88]/20 border border-[#00ff88]/50 text-[#00ff88] hover:bg-[#00ff88]/30">
+						LOAD DATA
+					</Button>
+				{:else}
+					<Button variant="outline" onclick={handleClose} class="border-[#1a2530] text-[#4a5568] hover:text-[#e0e0e0] hover:bg-[#1a2530]">
+						CANCEL
+					</Button>
+					<Button onclick={handleCreateNew} class="bg-[#00ff88]/20 border border-[#00ff88]/50 text-[#00ff88] hover:bg-[#00ff88]/30">
+						NEW PROJECT
+					</Button>
+				{/if}
+			</div>
+		</div>
+	</DialogContent>
+</Dialog>

@@ -1,191 +1,221 @@
-// ─── Global Application State ─────────────────────────────────────────────────
-//
-// A single Svelte 5 reactive class that holds every piece of shared state.
-// Components import the singleton `app` and read/write it directly —
-// no prop-drilling, no context providers, no stores.
-//
-// Because this is a .svelte.ts file, Svelte 5 runes ($state, $derived) are
-// compiled here just as they would be inside a .svelte component file.
-
-import { loadUAFDefinitions, getDomainLegend } from "$lib/utils/uafParser";
-import { transformMBSEToGraph, parseMBSEFile } from "$lib/utils/graphTransform";
-import { findTheme, DEFAULT_THEME, THEME_STORAGE_KEY } from "$lib/themes";
 import type {
-  GraphData,
-  MBSEFile,
-  SelectedItem,
-  UAFDefinitions,
-} from "$lib/types/mbse";
-import type { Theme } from "$lib/themes";
-
-export type GraphLayout =
-  | "force"
-  | "hierarchical-td"
-  | "hierarchical-lr"
-  | "radial";
+	MBSEData,
+	GraphNode,
+	GraphLink,
+	Project,
+	UAFData,
+} from "$lib/types/mbse.js";
+import { transformMBSEToGraph } from "$lib/utils/graphTransform.js";
+import { parseUAF } from "$lib/utils/uafParser.js";
+import { generateTestMBSEData, type TestGeneratorOptions } from "$lib/utils/testGenerator.js";
 
 class AppState {
-  // ── Theme ────────────────────────────────────────────────────────────────────
-  theme = $state<Theme>(DEFAULT_THEME);
+	uafData = $state<UAFData>({
+		domains: new Map(),
+		stereotypeToDomain: new Map(),
+	});
+	projects = $state<Project[]>([]);
+	currentProject = $state<Project | null>(null);
+	graphNodes = $state<GraphNode[]>([]);
+	graphLinks = $state<GraphLink[]>([]);
+	selectedNode = $state<GraphNode | null>(null);
+	selectedLink = $state<GraphLink | null>(null);
+	searchQuery = $state<string>("");
+	layoutMode = $state<"force" | "hierarchical-td" | "hierarchical-lr">("force");
+	selectedDomains = $state<Set<string>>(new Set());
+	isDetailOpen = $state<boolean>(false);
+	isLegendCollapsed = $state<boolean>(false);
 
-  // ── UAF definitions ──────────────────────────────────────────────────────────
-  uafStatus = $state<"loading" | "ready" | "error">("loading");
-  uafDefinitions = $state<UAFDefinitions>(new Map());
-  uafError = $state("");
+	matchingNodeIds = $derived.by(() => {
+		const hasSearch = this.searchQuery.trim().length > 0;
+		const hasDomainFilter = this.selectedDomains.size > 0;
 
-  // ── Loaded MBSE model ────────────────────────────────────────────────────────
-  graphData = $state<GraphData | null>(null);
-  fileName = $state("");
+		if (!hasSearch && !hasDomainFilter) return new Set<string>();
 
-  // ── Interaction ──────────────────────────────────────────────────────────────
-  selectedItem = $state<SelectedItem>(null);
-  searchQuery = $state("");
-  domainFilter = $state(new Set<string>());
-  graphLayout = $state<GraphLayout>("force");
+		const query = this.searchQuery.toLowerCase();
+		return new Set(
+			this.graphNodes
+				.filter((n) => {
+					const matchesSearch = !hasSearch || 
+						n.name.toLowerCase().includes(query) ||
+						n.type.toLowerCase().includes(query) ||
+						(n.description?.toLowerCase().includes(query) ?? false);
+					const matchesDomain = !hasDomainFilter || this.selectedDomains.has(n.domain);
+					return matchesSearch && matchesDomain;
+				})
+				.map((n) => n.id),
+		);
+	});
 
-  // ── Derived (auto-tracks, no dependency array needed) ────────────────────────
-  activeDomain = $derived(
-    this.selectedItem?.kind === "node"
-      ? (this.uafDefinitions.get(this.selectedItem.data.type)?.domain ?? "")
-      : "",
-  );
+	searchSuggestions = $derived.by(() => {
+		if (!this.searchQuery.trim()) return [];
+		const query = this.searchQuery.toLowerCase();
+		return this.graphNodes
+			.filter(
+				(n) =>
+					n.name.toLowerCase().includes(query) ||
+					n.type.toLowerCase().includes(query) ||
+					(n.description?.toLowerCase().includes(query) ?? false),
+			)
+			.slice(0, 5);
+	});
 
-  domainLegend = $derived(getDomainLegend(this.uafDefinitions));
+	activeDomain = $derived.by(() => {
+		if (this.selectedNode) {
+			return this.selectedNode.domain;
+		}
+		return null;
+	});
 
-  matchingNodeIds = $derived.by((): Set<string> => {
-    const q = this.searchQuery.trim().toLowerCase();
-    if (!q) return new Set();
-    return new Set(
-      (this.graphData?.nodes ?? [])
-        .filter((n) => n.name.toLowerCase().includes(q))
-        .map((n) => n.id),
-    );
-  });
+	constructor() {
+		this.loadUAFData();
+		this.loadProjects();
+	}
 
-  matchingNodes = $derived.by(() => {
-    const q = this.searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return (this.graphData?.nodes ?? []).filter((n) =>
-      n.name.toLowerCase().includes(q),
-    );
-  });
+	private async loadUAFData(): Promise<void> {
+		try {
+			this.uafData = await parseUAF();
+		} catch (error) {
+			console.error("Failed to parse UAF data:", error);
+		}
+	}
 
-  matchCount = $derived(this.matchingNodes.length);
+	private loadProjects(): void {
+		if (typeof window === "undefined") return;
+		try {
+			const stored = localStorage.getItem("mbse-projects");
+			if (stored) {
+				this.projects = JSON.parse(stored);
+			}
+		} catch (error) {
+			console.error("Failed to load projects:", error);
+		}
+	}
 
-  // ── Domain filter ─────────────────────────────────────────────────────────────
-  // Filter keys are either "Domain" (all sub-packages) or "Domain::Package".
-  filteredNodeIds = $derived.by((): Set<string> => {
-    if (this.domainFilter.size === 0) return new Set();
-    return new Set(
-      (this.graphData?.nodes ?? [])
-        .filter((n) => {
-          const def = this.uafDefinitions.get(n.type);
-          if (!def) return false;
-          return (
-            this.domainFilter.has(def.domain) ||
-            this.domainFilter.has(`${def.domain}::${def.packageName}`)
-          );
-        })
-        .map((n) => n.id),
-    );
-  });
+	private saveProjects(): void {
+		if (typeof window === "undefined") return;
+		try {
+			localStorage.setItem("mbse-projects", JSON.stringify(this.projects));
+		} catch (error) {
+			console.error("Failed to save projects:", error);
+		}
+	}
 
-  isFiltered = $derived(this.domainFilter.size > 0);
+	createProject(name: string, description?: string): Project {
+		const project: Project = {
+			id: typeof window !== "undefined" ? crypto.randomUUID() : `temp-${Date.now()}`,
+			name,
+			description,
+			data: { entities: [], relationships: [] },
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+		};
+		this.projects.push(project);
+		this.saveProjects();
+		return project;
+	}
 
-  // ── Actions ──────────────────────────────────────────────────────────────────
+	createProjectWithTestData(
+		name: string,
+		description: string | undefined,
+		options: TestGeneratorOptions,
+	): Project {
+		const data = generateTestMBSEData(options);
+		const project: Project = {
+			id: typeof window !== "undefined" ? crypto.randomUUID() : `temp-${Date.now()}`,
+			name,
+			description:
+				description || `Generated: ${options.entityCount} entities, ~${Math.floor(options.entityCount * options.linkDensity)} links`,
+			data,
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+		};
+		this.projects.push(project);
+		this.saveProjects();
+		return project;
+	}
 
-  // ── Theme actions ─────────────────────────────────────────────────────────────
+	loadProject(id: string): void {
+		const project = this.projects.find((p) => p.id === id);
+		if (project) {
+			this.currentProject = project;
+			this.setGraphData(project.data);
+		}
+	}
 
-  setTheme(id: string) {
-    const t = findTheme(id);
-    this.theme = t;
-    localStorage.setItem(THEME_STORAGE_KEY, id);
-    this.applyThemeToDom(t);
-  }
+	updateCurrentProject(data: MBSEData): void {
+		if (this.currentProject) {
+			this.currentProject.data = data;
+			this.currentProject.updatedAt = new Date().toISOString();
+			const index = this.projects.findIndex(
+				(p) => p.id === this.currentProject!.id,
+			);
+			if (index !== -1) {
+				this.projects[index] = this.currentProject;
+				this.saveProjects();
+			}
+		}
+	}
 
-  applyThemeToDom(t: Theme = this.theme) {
-    const root = document.documentElement;
-    root.setAttribute("data-theme", t.id);
-    // Write every CSS-variable override directly onto :root so Tailwind
-    // utilities that resolve through var(--color-*) pick them up immediately.
-    for (const [key, value] of Object.entries(t.cssVars)) {
-      root.style.setProperty(`--${key}`, value);
-    }
-    // Clear any keys that were set by a previous theme but are absent here,
-    // so we always land in a clean state when switching themes.
-    const allKeys = new Set([
-      "app-bg",
-      "app-text",
-      "color-white",
-      ...Array.from(
-        { length: 10 },
-        (_, i) =>
-          `color-gray-${[50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950][i]}`,
-      ),
-    ]);
-    for (const key of allKeys) {
-      if (!(key in t.cssVars)) {
-        root.style.removeProperty(`--${key}`);
-      }
-    }
-  }
+	deleteProject(id: string): void {
+		this.projects = this.projects.filter((p) => p.id !== id);
+		this.saveProjects();
+		if (this.currentProject?.id === id) {
+			this.currentProject = null;
+			this.graphNodes = [];
+			this.graphLinks = [];
+		}
+	}
 
-  initTheme() {
-    const saved = localStorage.getItem(THEME_STORAGE_KEY);
-    const t = saved ? findTheme(saved) : DEFAULT_THEME;
-    this.theme = t;
-    this.applyThemeToDom(t);
-  }
+	setGraphData(data: MBSEData): void {
+		const { nodes, links } = transformMBSEToGraph(data, this.uafData);
+		this.graphNodes = nodes;
+		this.graphLinks = links;
+	}
 
-  async loadUAF(path = "/UAF.xmi") {
-    this.uafStatus = "loading";
-    try {
-      this.uafDefinitions = await loadUAFDefinitions(path);
-      this.uafStatus = "ready";
-    } catch (e) {
-      this.uafError = e instanceof Error ? e.message : String(e);
-      this.uafStatus = "error";
-    }
-  }
+	selectNode(node: GraphNode | null): void {
+		this.selectedNode = node;
+		this.selectedLink = null;
+		this.isDetailOpen = node !== null;
+	}
 
-  toggleDomainFilter(key: string) {
-    const next = new Set(this.domainFilter);
-    if (next.has(key)) {
-      next.delete(key);
-    } else {
-      next.add(key);
-    }
-    this.domainFilter = next;
-  }
+	selectLink(link: GraphLink | null): void {
+		this.selectedLink = link;
+		this.selectedNode = null;
+		this.isDetailOpen = link !== null;
+	}
 
-  clearDomainFilter() {
-    this.domainFilter = new Set();
-  }
+	clearSelection(): void {
+		this.selectedNode = null;
+		this.selectedLink = null;
+		this.isDetailOpen = false;
+	}
 
-  selectFirstMatch() {
-    const first = this.matchingNodes[0];
-    if (first) {
-      this.selectedItem = { kind: "node", data: first };
-    }
-  }
+	clearSearch(): void {
+		this.searchQuery = "";
+	}
 
-  loadFile(raw: unknown, name: string) {
-    const parsed = parseMBSEFile(raw);
-    this.graphData = transformMBSEToGraph(parsed);
-    this.fileName = name;
-    this.selectedItem = null;
-    this.searchQuery = "";
-    this.domainFilter = new Set();
-  }
+	toggleDomain(domain: string): void {
+		if (this.selectedDomains.has(domain)) {
+			this.selectedDomains.delete(domain);
+		} else {
+			this.selectedDomains.add(domain);
+		}
+		this.selectedDomains = new Set(this.selectedDomains);
+	}
 
-  reset() {
-    this.graphData = null;
-    this.fileName = "";
-    this.selectedItem = null;
-    this.searchQuery = "";
-    this.domainFilter = new Set();
-  }
+	clearDomainFilter(): void {
+		this.selectedDomains = new Set();
+	}
+
+	clearAllFilters(): void {
+		this.searchQuery = "";
+		this.selectedDomains = new Set();
+	}
+
+	toggleLegend(): void {
+		this.isLegendCollapsed = !this.isLegendCollapsed;
+	}
 }
 
-// Singleton — import { app } from '$lib/state/app.svelte';
-export const app = new AppState();
+export const appState = new AppState();

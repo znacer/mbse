@@ -1,0 +1,110 @@
+{
+	"entities": [
+		{
+			"name": "Air Operations Center",
+			"uuid": "ent-001",
+			"description": "Primary command and control node for air operations. Responsible for planning, coordinating, and executing air missions.",
+			"type": "OperationalPerformer"
+		},
+		{
+			"name": "Strike Package",
+			"uuid": "ent-002",
+			"description": "A group of aircraft assigned to a specific mission or target.",
+			"type": "OperationalPerformer"
+		},
+		{
+			"name": "Intelligence Unit",
+			"uuid": "ent-003",
+			"description": "Provides intelligence, surveillance, and reconnaissance support.",
+			"type": "OperationalPerformer"
+		},
+		{
+			"name": "Logistics Command",
+			"uuid": "ent-004",
+			"description": "Manages supply chain and resource allocation for operations.",
+			"type": "OperationalPerformer"
+		},
+		{
+			"name": "Target Identification Capability",
+			"uuid": "ent-005",
+			"description": "Capability to identify and prioritize targets for engagement.",
+			"type": "Capability"
+		},
+		{
+			"name": "Mission Planning System",
+			"uuid": "ent-006",
+			"description": "System for planning and coordinating air missions.",
+			"type": "ResourcePerformer"
+		},
+		{
+			"name": "Communications Network",
+			"uuid": "ent-007",
+			"description": "Secure communications infrastructure for operations.",
+			"type": "ResourcePerformer"
+		},
+		{
+			"name": "Weather Service",
+			"uuid": "ent-008",
+			"description": "Provides weather data and forecasts for mission planning.",
+			"type": "ServiceProvider"
+		}
+	],
+	"relationships": [
+		{
+			"name": "Commands",
+			"uuid": "rel-001",
+			"description": "AOC commands the Strike Package for mission execution.",
+			"source": "ent-001",
+			"target": "ent-002"
+		},
+		{
+			"name": "Provides Intelligence To",
+			"uuid": "rel-002",
+			"description": "Intelligence Unit provides intelligence support to AOC.",
+			"source": "ent-003",
+			"target": "ent-001"
+		},
+		{
+			"name": "Supports",
+			"uuid": "rel-003",
+			"description": "Logistics Command supports AOC operations.",
+			"source": "ent-004",
+			"target": "ent-001"
+		},
+		{
+			"name": "Requires",
+			"uuid": "rel-004",
+			"description": "Strike Package requires Target Identification Capability.",
+			"source": "ent-002",
+			"target": "ent-005"
+		},
+		{
+			"name": "Uses",
+			"uuid": "rel-005",
+			"description": "AOC uses Mission Planning System for operations.",
+			"source": "ent-001",
+			"target": "ent-006"
+		},
+		{
+			"name": "Communicates Via",
+			"uuid": "rel-006",
+			"description": "AOC communicates via Communications Network.",
+			"source": "ent-001",
+			"target": "ent-007"
+		},
+		{
+			"name": "Provides Data To",
+			"uuid": "rel-007",
+			"description": "Weather Service provides data to Mission Planning System.",
+			"source": "ent-008",
+			"target": "ent-006"
+		},
+		{
+			"name": "Coordinates With",
+			"uuid": "rel-008",
+			"description": "Intelligence Unit coordinates with Strike Package.",
+			"source": "ent-003",
+			"target": "ent-002"
+		}
+	]
+}

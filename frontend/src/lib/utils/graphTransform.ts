@@ -1,98 +1,60 @@
-// ─── Graph Transform ──────────────────────────────────────────────────────────
-//
-// Converts a raw MBSE JSON file (entities + relationships) into the node/link
-// format consumed by force-graph.
+import type { MBSEData, GraphNode, GraphLink, UAFData } from "$lib/types/mbse.js";
+import { getDomainForStereotype } from "./uafParser.js";
 
-import type {
-  MBSEFile,
-  GraphData,
-  GraphNode,
-  GraphLink,
-} from "$lib/types/mbse";
+export function transformMBSEToGraph(
+	data: MBSEData,
+	uafData: UAFData
+): { nodes: GraphNode[]; links: GraphLink[] } {
+	const nodes: GraphNode[] = data.entities.map((entity) => ({
+		id: entity.uuid,
+		name: entity.name,
+		description: entity.description,
+		type: entity.type,
+		domain: getDomainForStereotype(entity.type, uafData)
+	}));
 
-export function transformMBSEToGraph(file: MBSEFile): GraphData {
-  const nodeIds = new Set(file.entities.map((e) => e.uuid));
+	const links: GraphLink[] = data.relationships.map((rel) => ({
+		id: rel.uuid,
+		source: rel.source,
+		target: rel.target,
+		name: rel.name,
+		description: rel.description
+	}));
 
-  const nodes: GraphNode[] = file.entities.map((e) => ({
-    id: e.uuid,
-    name: e.name,
-    description: e.description,
-    type: e.type,
-  }));
-
-  const links: GraphLink[] = file.relationships
-    .filter((r) => {
-      const valid = nodeIds.has(r.source) && nodeIds.has(r.target);
-      if (!valid) {
-        console.warn(
-          `[graphTransform] Skipping "${r.name}" (${r.uuid}): source or target not found.`,
-        );
-      }
-      return valid;
-    })
-    .map((r) => ({
-      id: r.uuid,
-      name: r.name,
-      description: r.description,
-      source: r.source,
-      target: r.target,
-    }));
-
-  return { nodes, links };
+	return { nodes, links };
 }
 
-export function parseMBSEFile(raw: unknown): MBSEFile {
-  // Case 1: Handle array format - take first element
-  if (Array.isArray(raw)) {
-    if (raw.length === 0) {
-      throw new Error("MBSE file array is empty.");
-    }
-    console.log(
-      "[parseMBSEFile] Detected array format, processing first element.",
-    );
-    raw = raw[0];
-  }
+export function validateMBSEData(data: unknown): data is MBSEData {
+	if (typeof data !== "object" || data === null) return false;
 
-  // Ensure we have an object
-  if (typeof raw !== "object" || raw === null) {
-    throw new Error("MBSE file must be a JSON object.");
-  }
+	const obj = data as Record<string, unknown>;
 
-  let obj = raw as Record<string, unknown>;
+	if (!Array.isArray(obj.entities)) return false;
+	if (!Array.isArray(obj.relationships)) return false;
 
-  // handle the case "entries" instead of "entities"
-  if (Array.isArray(obj.entries)) {
-    obj = { ...obj, entities: obj.entries };
-  }
+	for (const entity of obj.entities) {
+		if (typeof entity !== "object" || entity === null) return false;
+		const e = entity as Record<string, unknown>;
+		if (typeof e.name !== "string") return false;
+		if (typeof e.uuid !== "string") return false;
+		if (typeof e.type !== "string") return false;
+	}
 
-  // Validate array format
-  if (!Array.isArray(obj.entities))
-    throw new Error('Missing "entities" array.');
-  if (!Array.isArray(obj.relationships))
-    throw new Error('Missing "relationships" array.');
+	for (const rel of obj.relationships) {
+		if (typeof rel !== "object" || rel === null) return false;
+		const r = rel as Record<string, unknown>;
+		if (typeof r.name !== "string") return false;
+		if (typeof r.uuid !== "string") return false;
+		if (typeof r.source !== "string") return false;
+		if (typeof r.target !== "string") return false;
+	}
 
-  for (let i = 0; i < obj.entities.length; i++) {
-    const e = obj.entities[i] as Record<string, unknown>;
-    for (const f of ["name", "uuid", "description", "type"] as const) {
-      if (typeof e[f] !== "string")
-        throw new Error(`entities[${i}].${f} must be a string.`);
-    }
-  }
-  for (let i = 0; i < obj.relationships.length; i++) {
-    const r = obj.relationships[i] as Record<string, unknown>;
-    for (const f of [
-      "name",
-      "uuid",
-      "description",
-      "source",
-      "target",
-    ] as const) {
-      if (typeof r[f] !== "string")
-        throw new Error(`relationships[${i}].${f} must be a string.`);
-    }
-  }
-  return {
-    entities: obj.entities,
-    relationships: obj.relationships,
-  } as MBSEFile;
+	return true;
+}
+
+export function createEmptyMBSEData(): MBSEData {
+	return {
+		entities: [],
+		relationships: []
+	};
 }

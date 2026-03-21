@@ -1,611 +1,509 @@
 <script lang="ts">
-    // ─── GraphCanvas ────────────────────────────────────────────────────────────
-    //
-    // Renders the force-directed graph using the vanilla `force-graph` library.
-    // All canvas drawing functions read directly from the `app` singleton, so
-    // they always use the latest selection/search state without stale closures.
-    //
-    // Exposes `zoomToFit()` so the parent (Toolbar) can trigger a reset.
-    // Exposes `zoomToMatches()` to pan/zoom into search results.
+	import { onMount } from "svelte";
+	import * as d3 from "d3";
+	import { appState } from "$lib/state/app.svelte.js";
+	import { getDomainColor } from "$lib/utils/uafParser.js";
+	import type { GraphNode, GraphLink } from "$lib/types/mbse.js";
 
-    import { onMount } from "svelte";
-    import ForceGraph from "force-graph";
-    import { app } from "$lib/state/app.svelte";
-    import { getTypeColor } from "$lib/utils/uafParser";
-    import type { GraphNode, GraphLink } from "$lib/types/mbse";
-    import dagre from "dagre";
+	interface D3Node extends GraphNode {
+		x: number;
+		y: number;
+		vx: number;
+		vy: number;
+		fx: number | null;
+		fy: number | null;
+	}
 
-    // ── Constants ─────────────────────────────────────────────────────────────
-    const NODE_R = 6;
-    const SELECTED_RING = 4;
+	interface D3Link {
+		id: string;
+		source: D3Node;
+		target: D3Node;
+		name: string;
+		description?: string;
+	}
 
-    // DIM_ALPHA is now read from app.theme.canvas.dimAlpha at draw time
+	let svgElement: SVGSVGElement;
+	let containerElement: HTMLDivElement;
+	let width = $state(800);
+	let height = $state(600);
 
-    // ── DOM ref & force-graph instance ────────────────────────────────────────
-    let container: HTMLDivElement;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let fg: any = null;
+	interface Props {
+		transform?: d3.ZoomTransform;
+		simNodes?: { id: string; x: number; y: number; domain: string }[];
+	}
 
-    // ── Minimap ────────────────────────────────────────────────────────────────
-    const MM_W = 210;
-    const MM_H = 148;
-    const MM_PAD = 10;
+	let { transform = $bindable(), simNodes = $bindable() }: Props = $props();
 
-    let minimapCanvas: HTMLCanvasElement;
-    let minimapRaf: number;
+	let currentTransform = $derived(transform ?? d3.zoomIdentity);
 
-    // Stored per-frame transform so the click handler can back-project
-    let mmTransform = { minX: 0, minY: 0, scale: 1, offsetX: 0, offsetY: 0 };
+	let simulation: d3.Simulation<D3Node, D3Link> | null = null;
+	let zoom: d3.ZoomBehavior<SVGSVGElement, unknown> | null = null;
+	let svg: d3.Selection<SVGSVGElement, unknown, null, undefined> | null = null;
+	let currentNodes: D3Node[] = [];
+	let currentLinks: D3Link[] = [];
+	let hoveredNode = $state<D3Node | null>(null);
+	let tooltipX = $state(0);
+	let tooltipY = $state(0);
 
-    function drawMinimap() {
-        minimapRaf = requestAnimationFrame(drawMinimap);
-        if (!minimapCanvas || !fg) return;
+	const nodeWidth = 140;
+	const nodeHeight = 40;
 
-        const ctx = minimapCanvas.getContext("2d");
-        if (!ctx) return;
+	const DOMAIN_ICONS: Record<string, string> = {
+		Operational: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
+		Services: "M4 6h16M4 12h16M4 18h16",
+		Resources: "M12 2L2 7v10l10 5 10-5V7L12 2z",
+		Strategic: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
+		Personnel: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+		Security: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+		Projects: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
+		"Architecture Management": "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+		Standards: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z",
+		"Actual Resources": "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z",
+		"Summary and Overview": "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6",
+		Parameters: "M12 3v18M3 12h18"
+	};
 
-        const nodes: GraphNode[] = fg.graphData()?.nodes ?? [];
+	function getIconPath(domain: string): string {
+		return DOMAIN_ICONS[domain] || DOMAIN_ICONS.Parameters;
+	}
 
-        // ── background ────────────────────────────────────────────────────────
-        const ct = app.theme.canvas;
-        ctx.clearRect(0, 0, MM_W, MM_H);
-        ctx.fillStyle = ct.minimapBg;
-        ctx.beginPath();
-        if (typeof ctx.roundRect === "function") {
-            ctx.roundRect(0, 0, MM_W, MM_H, 8);
-        } else {
-            ctx.rect(0, 0, MM_W, MM_H);
-        }
-        ctx.fill();
+	onMount(() => {
+		if (!svgElement) return;
 
-        // ── border ────────────────────────────────────────────────────────────
-        ctx.strokeStyle = ct.minimapBorder;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        if (typeof ctx.roundRect === "function") {
-            ctx.roundRect(0.5, 0.5, MM_W - 1, MM_H - 1, 8);
-        } else {
-            ctx.rect(0.5, 0.5, MM_W - 1, MM_H - 1);
-        }
-        ctx.stroke();
+		svg = d3.select(svgElement);
+		setupZoom();
+		initializeSimulation();
 
-        if (nodes.length === 0) return;
+		return () => {
+			if (simulation) simulation.stop();
+		};
+	});
 
-        // ── bounding box of all node positions ────────────────────────────────
-        let minX = Infinity,
-            minY = Infinity,
-            maxX = -Infinity,
-            maxY = -Infinity;
-        for (const n of nodes) {
-            const x = n.x ?? 0,
-                y = n.y ?? 0;
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-        }
-        const bbPad = Math.max(maxX - minX, maxY - minY) * 0.08 + 10;
-        minX -= bbPad;
-        minY -= bbPad;
-        maxX += bbPad;
-        maxY += bbPad;
-        const fullW = maxX - minX || 1;
-        const fullH = maxY - minY || 1;
+	function setupZoom(): void {
+		if (!svg) return;
 
-        const mw = MM_W - MM_PAD * 2;
-        const mh = MM_H - MM_PAD * 2;
-        const scale = Math.min(mw / fullW, mh / fullH);
-        const offsetX = MM_PAD + (mw - fullW * scale) / 2;
-        const offsetY = MM_PAD + (mh - fullH * scale) / 2;
+		zoom = d3.zoom<SVGSVGElement, unknown>()
+			.scaleExtent([0.1, 4])
+			.on("zoom", (event) => {
+				const g = svg!.select<SVGGElement>("g.graph-container");
+				g.attr("transform", event.transform);
+				transform = event.transform;
+			});
 
-        mmTransform = { minX, minY, scale, offsetX, offsetY };
+		svg.call(zoom);
 
-        function toMM(gx: number, gy: number) {
-            return {
-                x: offsetX + (gx - minX) * scale,
-                y: offsetY + (gy - minY) * scale,
-            };
-        }
+		const initialTransform = d3.zoomIdentity.translate(width / 2, height / 2).scale(1);
+		svg.call(zoom.transform, initialTransform);
+	}
 
-        // ── links (skip if graph is very large) ───────────────────────────────
-        const links: GraphLink[] = fg.graphData()?.links ?? [];
-        if (links.length < 4000) {
-            ctx.strokeStyle = ct.minimapLinkStroke;
-            ctx.lineWidth = 0.5;
-            for (const link of links) {
-                const src = link.source as GraphNode;
-                const tgt = link.target as GraphNode;
-                if (
-                    src?.x == null ||
-                    src?.y == null ||
-                    tgt?.x == null ||
-                    tgt?.y == null
-                )
-                    continue;
-                const s = toMM(src.x!, src.y!);
-                const t = toMM(tgt.x!, tgt.y!);
-                ctx.beginPath();
-                ctx.moveTo(s.x, s.y);
-                ctx.lineTo(t.x, t.y);
-                ctx.stroke();
-            }
-        }
+	function initializeSimulation(): void {
+		if (!svg) return;
 
-        // ── nodes ─────────────────────────────────────────────────────────────
-        const searching = app.searchQuery.trim().length > 0;
-        for (const node of nodes) {
-            const { x, y } = toMM(node.x ?? 0, node.y ?? 0);
-            const color = getTypeColor(node.type, app.uafDefinitions);
-            const isSelected =
-                app.selectedItem?.kind === "node" &&
-                app.selectedItem.data.id === node.id;
-            const isMatch = app.matchingNodeIds.has(node.id);
-            const passesFilter =
-                !app.isFiltered || app.filteredNodeIds.has(node.id);
-            const isDimmed =
-                !isSelected &&
-                ((searching && !isMatch) || (app.isFiltered && !passesFilter));
+		simulation = d3.forceSimulation<D3Node>()
+			.force("link", d3.forceLink<D3Node, D3Link>().id(d => d.id).distance(180))
+			.force("charge", d3.forceManyBody().strength(-400))
+			.force("center", d3.forceCenter(0, 0))
+			.force("collision", d3.forceCollide().radius(Math.max(nodeWidth, nodeHeight)));
 
-            const r = isSelected ? 3.5 : 1.8;
-            ctx.beginPath();
-            ctx.arc(x, y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = isDimmed
-                ? rgba(color, 0.1)
-                : rgba(color, isSelected || isMatch ? 1 : 0.75);
-            ctx.fill();
+		updateGraph();
+	}
 
-            if (isSelected) {
-                ctx.beginPath();
-                ctx.arc(x, y, r + 2.5, 0, 2 * Math.PI);
-                ctx.strokeStyle = rgba(color, 0.55);
-                ctx.lineWidth = 1.2;
-                ctx.stroke();
-            } else if (isMatch && searching) {
-                ctx.beginPath();
-                ctx.arc(x, y, r + 2, 0, 2 * Math.PI);
-                ctx.strokeStyle = "rgba(251,191,36,0.7)";
-                ctx.lineWidth = 1;
-                ctx.stroke();
-            }
-        }
+	function computeHierarchicalLayout(nodes: D3Node[], links: D3Link[], direction: "td" | "lr"): void {
+		const nodeMap = new Map<string, D3Node>();
+		nodes.forEach(n => nodeMap.set(n.id, n));
 
-        // ── viewport rectangle ────────────────────────────────────────────────
-        try {
-            const zoom: number = fg.zoom();
-            const center: { x: number; y: number } = fg.centerAt();
-            if (zoom > 0 && center) {
-                const vw = fg.width() / zoom;
-                const vh = fg.height() / zoom;
-                const vCorner = toMM(center.x - vw / 2, center.y - vh / 2);
-                const viewW = vw * scale;
-                const viewH = vh * scale;
+		const inDegree = new Map<string, number>();
+		const outDegree = new Map<string, number>();
+		nodes.forEach(n => {
+			inDegree.set(n.id, 0);
+			outDegree.set(n.id, 0);
+		});
 
-                ctx.fillStyle = ct.minimapViewportFill;
-                ctx.fillRect(vCorner.x, vCorner.y, viewW, viewH);
-                ctx.strokeStyle = ct.minimapViewportStroke;
-                ctx.lineWidth = 1;
-                ctx.strokeRect(vCorner.x, vCorner.y, viewW, viewH);
-            }
-        } catch (_) {
-            // guard against internal force-graph errors during init
-        }
+		links.forEach(l => {
+			const sourceId = l.source.id;
+			const targetId = l.target.id;
+			outDegree.set(sourceId, (outDegree.get(sourceId) ?? 0) + 1);
+			inDegree.set(targetId, (inDegree.get(targetId) ?? 0) + 1);
+		});
 
-        // ── label ─────────────────────────────────────────────────────────────
-        ctx.font = "9px Inter,system-ui,sans-serif";
-        ctx.fillStyle = ct.minimapLabel;
-        ctx.textAlign = "left";
-        ctx.textBaseline = "bottom";
-        ctx.fillText("MINIMAP", MM_PAD, MM_H - 4);
-    }
+		const levels = new Map<string, number>();
+		const visited = new Set<string>();
 
-    function onMinimapPointerDown(e: MouseEvent) {
-        if (!fg || !minimapCanvas) return;
-        const rect = minimapCanvas.getBoundingClientRect();
-        const mmX = (e.clientX - rect.left) * (MM_W / rect.width);
-        const mmY = (e.clientY - rect.top) * (MM_H / rect.height);
-        const { minX, minY, scale, offsetX, offsetY } = mmTransform;
-        const gx = minX + (mmX - offsetX) / scale;
-        const gy = minY + (mmY - offsetY) / scale;
-        fg.centerAt(gx, gy, 250);
-    }
+		const roots = nodes.filter(n => (inDegree.get(n.id) ?? 0) === 0);
+		if (roots.length === 0 && nodes.length > 0) {
+			roots.push(nodes[0]);
+		}
 
-    // ── Colour helper ─────────────────────────────────────────────────────────
-    function rgba(hex: string, a: number): string {
-        const n = parseInt(hex.replace("#", ""), 16);
-        return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-    }
+		let maxLevel = 0;
+		const queue: { node: D3Node; level: number }[] = roots.map(r => ({ node: r, level: 0 }));
+		
+		while (queue.length > 0) {
+			const { node, level } = queue.shift()!;
+			if (visited.has(node.id)) continue;
+			visited.add(node.id);
+			levels.set(node.id, level);
+			maxLevel = Math.max(maxLevel, level);
 
-    // ── Canvas: draw node ─────────────────────────────────────────────────────
-    function drawNode(
-        node: GraphNode,
-        ctx: CanvasRenderingContext2D,
-        scale: number,
-    ) {
-        const nodeSize = NODE_R * Math.pow(scale, -0.4);
-        const x = node.x ?? 0;
-        const y = node.y ?? 0;
-        const baseColor = getTypeColor(node.type, app.uafDefinitions);
-        const isSelected =
-            app.selectedItem?.kind === "node" &&
-            app.selectedItem.data.id === node.id;
-        const isMatch = app.matchingNodeIds.has(node.id);
-        const searching = app.searchQuery.trim().length > 0;
-        const passesFilter =
-            !app.isFiltered || app.filteredNodeIds.has(node.id);
-        const isDimmed =
-            !isSelected &&
-            ((searching && !isMatch) || (app.isFiltered && !passesFilter));
-        const ct = app.theme.canvas;
-        const alpha = isDimmed ? ct.dimAlpha : 1;
+			links.forEach(l => {
+				if (l.source.id === node.id && !visited.has(l.target.id)) {
+					queue.push({ node: l.target, level: level + 1 });
+				}
+			});
+		}
 
-        // Selected glow ring
-        if (isSelected) {
-            ctx.beginPath();
-            ctx.arc(x, y, nodeSize + SELECTED_RING, 0, 2 * Math.PI);
-            ctx.fillStyle = rgba(baseColor, 0.25);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(x, y, nodeSize + SELECTED_RING / 2, 0, 2 * Math.PI);
-            ctx.strokeStyle = rgba(baseColor, 0.65);
-            ctx.lineWidth = 1.5 / scale;
-            ctx.stroke();
-        }
+		nodes.forEach(n => {
+			if (!visited.has(n.id)) {
+				levels.set(n.id, maxLevel + 1);
+			}
+		});
 
-        // Search match highlight ring
-        if (searching && isMatch && !isSelected) {
-            ctx.beginPath();
-            ctx.arc(x, y, nodeSize + 3, 0, 2 * Math.PI);
-            ctx.strokeStyle = `rgba(251,191,36,0.9)`;
-            ctx.lineWidth = 1.5 / scale;
-            ctx.stroke();
-        }
+		const nodesByLevel = new Map<number, D3Node[]>();
+		nodes.forEach(n => {
+			const level = levels.get(n.id) ?? 0;
+			if (!nodesByLevel.has(level)) nodesByLevel.set(level, []);
+			nodesByLevel.get(level)!.push(n);
+		});
 
-        // Node fill
-        ctx.beginPath();
-        ctx.arc(x, y, nodeSize, 0, 2 * Math.PI);
-        ctx.fillStyle = rgba(baseColor, alpha);
-        ctx.fill();
+		const levelSpacing = direction === "td" ? nodeHeight * 3 : nodeWidth * 2.5;
+		const nodeSpacing = direction === "td" ? nodeWidth * 1.5 : nodeHeight * 2;
 
-        // Node border
-        ctx.beginPath();
-        ctx.arc(x, y, nodeSize, 0, 2 * Math.PI);
-        const [nr, ng, nb] = ct.nodeRingRgb;
-        ctx.strokeStyle = `rgba(${nr},${ng},${nb},${isDimmed ? 0.04 : 0.3})`;
-        ctx.lineWidth = 0.8 / scale;
-        ctx.stroke();
+		nodesByLevel.forEach((levelNodes, level) => {
+			const totalSize = (levelNodes.length - 1) * nodeSpacing;
+			const startIndex = -totalSize / 2;
 
-        // Label
-        if (scale < 0.35) return;
-        const labelAlpha = isDimmed ? 0.1 : isSelected || isMatch ? 1 : 0.75;
-        // const fontSize = Math.max(6, 11 / scale);
-        const fontSize = 11 * Math.pow(scale, -0.7);
-        ctx.font = `${isSelected ? 600 : 400} ${fontSize}px Inter,system-ui,sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        const labelY = y + nodeSize + fontSize * 0.8;
-        const tw = ctx.measureText(node.name).width;
-        const px = 3 / scale,
-            py = 2 / scale;
-        const [lr, lg, lb] = ct.labelBgRgb;
-        ctx.fillStyle = `rgba(${lr},${lg},${lb},${labelAlpha * ct.labelBgAlpha})`;
-        ctx.fillRect(
-            x - tw / 2 - px,
-            labelY - fontSize / 2 - py,
-            tw + px * 2,
-            fontSize + py * 2,
-        );
-        ctx.fillStyle = rgba(ct.labelTextHex, labelAlpha);
-        ctx.fillText(node.name, x, labelY);
-    }
+			levelNodes.forEach((node, index) => {
+				if (direction === "td") {
+					node.x = startIndex + index * nodeSpacing;
+					node.y = level * levelSpacing;
+				} else {
+					node.x = level * levelSpacing;
+					node.y = startIndex + index * nodeSpacing;
+				}
+			});
+		});
+	}
 
-    // ── Canvas: draw link ─────────────────────────────────────────────────────
-    function drawLink(
-        link: GraphLink,
-        ctx: CanvasRenderingContext2D,
-        scale: number,
-    ) {
-        const src = link.source as GraphNode;
-        const tgt = link.target as GraphNode;
-        const nodeSize = NODE_R * Math.pow(scale, -0.4);
-        if (!src || !tgt) return;
+	function updateGraph(): void {
+		if (!svg || !simulation) return;
 
-        const sx = src.x ?? 0,
-            sy = src.y ?? 0;
-        const tx = tgt.x ?? 0,
-            ty = tgt.y ?? 0;
+		const g = svg.select<SVGGElement>("g.graph-container");
+		if (g.empty()) {
+			svg.append("g").attr("class", "graph-container");
+		}
 
-        const isSelected =
-            app.selectedItem?.kind === "link" &&
-            app.selectedItem.data.id === link.id;
-        const searching = app.searchQuery.trim().length > 0;
-        const srcMatch = app.matchingNodeIds.has(src.id);
-        const tgtMatch = app.matchingNodeIds.has(tgt.id);
-        const srcPassesFilter =
-            !app.isFiltered || app.filteredNodeIds.has(src.id);
-        const tgtPassesFilter =
-            !app.isFiltered || app.filteredNodeIds.has(tgt.id);
-        const isDimmed =
-            !isSelected &&
-            ((searching && !srcMatch && !tgtMatch) ||
-                (app.isFiltered && !srcPassesFilter && !tgtPassesFilter));
+		const nodes: D3Node[] = appState.graphNodes.map(n => ({
+			...n,
+			x: n.x ?? 0,
+			y: n.y ?? 0,
+			vx: n.vx ?? 0,
+			vy: n.vy ?? 0,
+			fx: n.fx ?? null,
+			fy: n.fy ?? null
+		}));
 
-        const alpha = isDimmed ? 0.05 : isSelected ? 0.9 : 0.35;
+		const links: D3Link[] = appState.graphLinks.map(l => {
+			const sourceNode = nodes.find(n => n.id === (typeof l.source === 'string' ? l.source : l.source.id))!;
+			const targetNode = nodes.find(n => n.id === (typeof l.target === 'string' ? l.target : l.target.id))!;
+			return {
+				id: l.id,
+				source: sourceNode,
+				target: targetNode,
+				name: l.name,
+				description: l.description
+			};
+		});
 
-        const ct = app.theme.canvas;
-        const [lr, lg, lb] = ct.linkRgb;
-        const [sr, sg, sb] = ct.linkSelectedRgb;
-        ctx.beginPath();
-        ctx.moveTo(sx, sy);
-        ctx.lineTo(tx, ty);
-        ctx.strokeStyle = isSelected
-            ? `rgba(${sr},${sg},${sb},${alpha})`
-            : `rgba(${lr},${lg},${lb},${alpha})`;
-        ctx.lineWidth = (isSelected ? 2 : 1) / scale;
-        ctx.stroke();
+		currentLinks = links;
 
-        // Arrow head
-        const angle = Math.atan2(ty - sy, tx - sx);
-        const aLen = 8 / scale;
-        const aAngle = Math.PI / 7;
-        const tipX = tx - nodeSize * Math.cos(angle);
-        const tipY = ty - nodeSize * Math.sin(angle);
-        ctx.beginPath();
-        ctx.moveTo(tipX, tipY);
-        ctx.lineTo(
-            tipX - aLen * Math.cos(angle - aAngle),
-            tipY - aLen * Math.sin(angle - aAngle),
-        );
-        ctx.lineTo(
-            tipX - aLen * Math.cos(angle + aAngle),
-            tipY - aLen * Math.sin(angle + aAngle),
-        );
-        ctx.closePath();
-        ctx.fillStyle = isSelected
-            ? `rgba(${sr},${sg},${sb},${alpha})`
-            : `rgba(${lr},${lg},${lb},${alpha})`;
-        ctx.fill();
+		const isForceLayout = appState.layoutMode === "force";
+		
+		if (!isForceLayout) {
+			computeHierarchicalLayout(nodes, links, appState.layoutMode === "hierarchical-td" ? "td" : "lr");
+			simulation.stop();
+		}
 
-        // Link label (only when selected and zoomed in)
-        if (isSelected && link.name && scale > 0.6) {
-            const mx = (sx + tx) / 2,
-                my = (sy + ty) / 2;
-            const fs = Math.max(6, 9 / scale);
-            ctx.font = `${fs}px Inter,system-ui,sans-serif`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            const tw = ctx.measureText(link.name).width;
-            const [llr, llg, llb] = ct.labelBgRgb;
-            ctx.fillStyle = `rgba(${llr},${llg},${llb},0.82)`;
-            ctx.fillRect(mx - tw / 2 - 3, my - fs / 2 - 2, tw + 6, fs + 4);
-            ctx.fillStyle = `rgba(${sr},${sg},${sb},0.95)`;
-            ctx.fillText(link.name, mx, my);
-        }
-    }
+		const linkSelection = svg.select<SVGGElement>("g.graph-container")
+			.selectAll<SVGLineElement, D3Link>(".link")
+			.data(links, d => d.id);
 
-    // ── Hit area for pointer events ───────────────────────────────────────────
-    function nodePointerArea(
-        node: GraphNode,
-        color: string,
-        ctx: CanvasRenderingContext2D,
-        globalScale: number,
-    ) {
-        const nodeSize = NODE_R * Math.pow(globalScale, -0.4);
-        const hitRadius = nodeSize + 4 / globalScale;
-        ctx.beginPath();
-        ctx.arc(node.x ?? 0, node.y ?? 0, hitRadius, 0, 2 * Math.PI);
-        ctx.fillStyle = color;
-        ctx.fill();
-    }
+		linkSelection.exit().remove();
 
-    // ── Mount: create force-graph instance ───────────────────────────────────
-    onMount(() => {
-        fg = new ForceGraph(container)
-            .nodeId("id")
-            .nodeCanvasObject(drawNode as any)
-            .nodeCanvasObjectMode(() => "replace")
-            .nodePointerAreaPaint(nodePointerArea as any)
-            .linkCanvasObject(drawLink as any)
-            .linkCanvasObjectMode(() => "replace")
-            .linkDirectionalArrowLength(0)
-            .onNodeClick((node: any) => {
-                const n = node as GraphNode;
-                if (
-                    app.selectedItem?.kind === "node" &&
-                    app.selectedItem.data.id === n.id
-                ) {
-                    app.selectedItem = null;
-                } else {
-                    app.selectedItem = { kind: "node", data: n };
-                }
-                const zoom = fg?.zoom();
-                fg?.zoom(zoom);
-            })
-            .onLinkClick((link: any) => {
-                const l = link as GraphLink;
-                if (
-                    app.selectedItem?.kind === "link" &&
-                    app.selectedItem.data.id === l.id
-                ) {
-                    app.selectedItem = null;
-                } else {
-                    app.selectedItem = { kind: "link", data: l };
-                }
-                const zoom = fg?.zoom();
-                fg?.zoom(zoom);
-            })
-            .onBackgroundClick(() => {
-                app.selectedItem = null;
-            })
-            .cooldownTicks(120)
-            .d3AlphaDecay(0.02)
-            .d3VelocityDecay(0.4)
-            .backgroundColor(app.theme.canvas.background)
-            .nodeLabel("")
-            .linkLabel("");
+		const linkEnter = linkSelection.enter()
+			.append("line")
+			.attr("class", "link")
+			.attr("stroke", "#00ff88")
+			.attr("stroke-opacity", 0.5)
+			.attr("stroke-width", 1)
+			.attr("stroke-dasharray", "4 4")
+			.style("cursor", "pointer")
+			.on("click", (_, d) => {
+				appState.selectLink({
+					id: d.id,
+					source: d.source.id,
+					target: d.target.id,
+					name: d.name,
+					description: d.description
+				});
+			});
 
-        // Set initial data
-        syncData();
+		const link = linkEnter.merge(linkSelection);
 
-        // Start minimap render loop
-        drawMinimap();
+		const nodeSelection = svg.select<SVGGElement>("g.graph-container")
+			.selectAll<SVGGElement, D3Node>(".node")
+			.data(nodes, d => d.id);
 
-        // Resize observer
-        const obs = new ResizeObserver(() => {
-            fg?.width(container.clientWidth).height(container.clientHeight);
-        });
-        obs.observe(container);
-        fg.width(container.clientWidth).height(container.clientHeight);
+		nodeSelection.exit().remove();
 
-        return () => {
-            obs.disconnect();
-            cancelAnimationFrame(minimapRaf);
-            fg._destructor?.();
-            fg = null;
-        };
-    });
+		const nodeEnter = nodeSelection.enter()
+			.append("g")
+			.attr("class", "node")
+			.style("cursor", "pointer")
+			.call(d3.drag<SVGGElement, D3Node>()
+				.on("start", (event, d) => {
+					if (!event.active && simulation) simulation.alphaTarget(0.3).restart();
+					d.fx = d.x;
+					d.fy = d.y;
+				})
+				.on("drag", (event, d) => {
+					d.fx = event.x;
+					d.fy = event.y;
+				})
+				.on("end", (event, d) => {
+					if (!event.active && simulation) simulation.alphaTarget(0);
+					d.fx = null;
+					d.fy = null;
+				}))
+			.on("click", (_, d) => {
+				appState.selectNode(d);
+			})
+			.on("mouseenter", (event, d) => {
+				hoveredNode = d;
+				const rect = containerElement.getBoundingClientRect();
+				tooltipX = event.clientX - rect.left;
+				tooltipY = event.clientY - rect.top;
+			})
+			.on("mousemove", (event) => {
+				const rect = containerElement.getBoundingClientRect();
+				tooltipX = event.clientX - rect.left;
+				tooltipY = event.clientY - rect.top;
+			})
+			.on("mouseleave", () => {
+				hoveredNode = null;
+			});
 
-    // ── Reactive: re-load graph data when file changes ────────────────────────
-    // ── Layout helpers ────────────────────────────────────────────────────────
+		nodeEnter.append("rect")
+			.attr("class", "node-bg")
+			.attr("x", -nodeWidth / 2)
+			.attr("y", -nodeHeight / 2)
+			.attr("width", nodeWidth)
+			.attr("height", nodeHeight)
+			.attr("rx", 4)
+			.attr("ry", 4)
+			.attr("fill", d => getDomainColor(d.domain, appState.uafData))
+			.attr("fill-opacity", 0.15)
+			.attr("stroke", d => getDomainColor(d.domain, appState.uafData))
+			.attr("stroke-width", 1.5)
+			.attr("stroke-opacity", 0.8);
 
-    //TODO: Implement this
-    function applyLayout(layout: string) {
-        if (!fg) return;
-        switch (layout) {
-            case "hierarchical-td":
-                fg.dagMode("td").dagLevelDistance(80);
-                break;
-            case "hierarchical-lr":
-                fg.dagMode("lr").dagLevelDistance(120);
-                break;
-            case "radial":
-                fg.dagMode("radialout").dagLevelDistance(80);
-                break;
-            case "force":
-            default:
-                fg.dagMode(null);
-                break;
-        }
-        // Re-heat simulation so new forces take effect
-        fg.d3ReheatSimulation();
-        setTimeout(() => fg?.zoomToFit(600, 60), 600);
-    }
+		nodeEnter.append("rect")
+			.attr("class", "node-glow")
+			.attr("x", -nodeWidth / 2 - 2)
+			.attr("y", -nodeHeight / 2 - 2)
+			.attr("width", nodeWidth + 4)
+			.attr("height", nodeHeight + 4)
+			.attr("rx", 6)
+			.attr("ry", 6)
+			.attr("fill", "none")
+			.attr("stroke", d => getDomainColor(d.domain, appState.uafData))
+			.attr("stroke-width", 0.5)
+			.attr("stroke-opacity", 0.3)
+			.attr("filter", "url(#glow)");
 
-    function syncData() {
-        if (!fg) return;
-        const data = app.graphData ?? { nodes: [], links: [] };
-        fg.graphData(JSON.parse(JSON.stringify(data)));
-        applyLayout(app.graphLayout);
-        setTimeout(() => fg?.zoomToFit(600, 60), 600);
-    }
+		nodeEnter.append("path")
+			.attr("class", "node-icon")
+			.attr("d", d => getIconPath(d.domain))
+			.attr("transform", `translate(${-nodeWidth / 2 + 16}, ${-nodeHeight / 2 + 8}) scale(0.7)`)
+			.attr("fill", "none")
+			.attr("stroke", d => getDomainColor(d.domain, appState.uafData))
+			.attr("stroke-width", 1.5)
+			.attr("stroke-linecap", "round")
+			.attr("stroke-linejoin", "round");
 
-    $effect(() => {
-        const _data = app.graphData; // track
-        if (fg) syncData();
-    });
+		nodeEnter.append("text")
+			.attr("class", "node-label")
+			.attr("x", -nodeWidth / 2 + 36)
+			.attr("y", 4)
+			.attr("fill", "#e0e0e0")
+			.attr("font-size", "11px")
+			.attr("font-family", "monospace")
+			.attr("font-weight", "500")
+			.attr("text-anchor", "start")
+			.attr("dominant-baseline", "middle")
+			.text(d => {
+				const name = d.name || d.id;
+				return name.length > 12 ? name.substring(0, 10) + '...' : name;
+			});
 
-    // ── Reactive: apply layout when graphLayout changes ────────────────────────
-    $effect(() => {
-        const layout = app.graphLayout; // track
-        if (fg) applyLayout(layout);
-    });
+		const node = nodeEnter.merge(nodeSelection);
 
-    // ── Reactive: repaint canvas when selection/search/theme changes ───────────
-    $effect(() => {
-        const _s = app.selectedItem; // track
-        const _q = app.searchQuery; // track
-        const _t = app.theme; // track
-        const _f = app.filteredNodeIds; // track
-        const _if = app.isFiltered; // track
-        // fg?.refresh();
+		currentNodes = nodes;
+		simulation.nodes(nodes);
+		(simulation.force("link") as d3.ForceLink<D3Node, D3Link>).links(links);
 
-        const zoom = fg?.zoom();
-        fg?.zoom(zoom);
-    });
+		if (isForceLayout) {
+			simulation.alpha(1).restart();
+		} else {
+			link
+				.attr("x1", d => d.source.x)
+				.attr("y1", d => d.source.y)
+				.attr("x2", d => d.target.x)
+				.attr("y2", d => d.target.y);
 
-    // ── Reactive: update force-graph background colour when theme changes ──────
-    $effect(() => {
-        const bg = app.theme.canvas.background; // track
-        fg?.backgroundColor(bg);
-    });
+			node.attr("transform", d => `translate(${d.x}, ${d.y})`);
 
-    // ── Reactive: zoom to matching nodes when search query changes ─────────────
-    let searchZoomDebounce: ReturnType<typeof setTimeout>;
-    $effect(() => {
-        const q = app.searchQuery; // track
-        const matchIds = app.matchingNodeIds; // track
-        clearTimeout(searchZoomDebounce);
-        if (q && matchIds.size > 0) {
-            searchZoomDebounce = setTimeout(() => {
-                fg?.zoomToFit(500, 80, (node: unknown) =>
-                    matchIds.has((node as GraphNode).id),
-                );
-            }, 300);
-        } else if (!q) {
-            // Search cleared — reset to full view (unless filter is active)
-            if (!app.isFiltered) {
-                searchZoomDebounce = setTimeout(
-                    () => fg?.zoomToFit(400, 60),
-                    150,
-                );
-            }
-        }
-    });
+			simNodes = currentNodes.map(n => ({ id: n.id, x: n.x, y: n.y, domain: n.domain }));
+		}
 
-    // ── Reactive: zoom to filtered nodes when domain filter changes ────────────
-    let filterZoomDebounce: ReturnType<typeof setTimeout>;
-    $effect(() => {
-        const filteredIds = app.filteredNodeIds; // track
-        const isFiltered = app.isFiltered; // track
-        clearTimeout(filterZoomDebounce);
-        if (isFiltered && filteredIds.size > 0) {
-            filterZoomDebounce = setTimeout(() => {
-                fg?.zoomToFit(600, 60, (node: unknown) =>
-                    filteredIds.has((node as GraphNode).id),
-                );
-            }, 300);
-        } else if (!isFiltered) {
-            filterZoomDebounce = setTimeout(() => fg?.zoomToFit(400, 60), 150);
-        }
-        fg?.refresh();
-    });
+		simulation.on("tick", () => {
+			if (!isForceLayout) return;
+			
+			link
+				.attr("x1", d => d.source.x)
+				.attr("y1", d => d.source.y)
+				.attr("x2", d => d.target.x)
+				.attr("y2", d => d.target.y);
 
-    // ── Exposed methods ───────────────────────────────────────────────────────
-    export function zoomToFit() {
-        fg?.zoomToFit(400, 60);
-    }
+			node.attr("transform", d => `translate(${d.x}, ${d.y})`);
 
-    export function zoomToMatches() {
-        const matchIds = app.matchingNodeIds;
-        if (matchIds.size === 0) return;
-        fg?.zoomToFit(500, 80, (node: unknown) =>
-            matchIds.has((node as GraphNode).id),
-        );
-    }
+			simNodes = currentNodes.map(n => ({ id: n.id, x: n.x, y: n.y, domain: n.domain }));
+		});
+	}
 
-    export function zoomToNode(nodeId: string) {
-        const nodes: GraphNode[] = fg?.graphData()?.nodes ?? [];
-        const node = nodes.find((n) => n.id === nodeId);
-        if (node?.x != null && node?.y != null) {
-            fg?.centerAt(node.x, node.y, 500);
-            fg?.zoom(4, 500);
-        }
-    }
+	$effect(() => {
+		appState.graphNodes;
+		appState.graphLinks;
+		appState.layoutMode;
+		if (simulation) {
+			updateGraph();
+		}
+	});
+
+	$effect(() => {
+		appState.matchingNodeIds;
+		if (simulation && svg) {
+			const node = svg.select<SVGGElement>("g.graph-container")
+				.selectAll<SVGGElement, D3Node>(".node");
+			const highlighted = appState.matchingNodeIds;
+			node.attr("opacity", d => {
+				if (highlighted.size === 0) return 1;
+				return highlighted.has(d.id) ? 1 : 0.2;
+			});
+		}
+	});
+
+	function handleResize(): void {
+		if (containerElement) {
+			width = containerElement.clientWidth;
+			height = containerElement.clientHeight;
+			if (svgElement) {
+				svgElement.setAttribute("width", String(width));
+				svgElement.setAttribute("height", String(height));
+			}
+		}
+	}
+
+	$effect(() => {
+		if (containerElement) {
+			handleResize();
+			window.addEventListener("resize", handleResize);
+			return () => window.removeEventListener("resize", handleResize);
+		}
+	});
+
+	export function resetZoom(): void {
+		if (svg && zoom) {
+			const initialTransform = d3.zoomIdentity.translate(width / 2, height / 2).scale(1);
+			svg.call(zoom.transform, initialTransform);
+		}
+	}
+
+	export function fitToScreen(): void {
+		if (!svg || !zoom) return;
+		const nodes = appState.graphNodes;
+		if (nodes.length === 0) return;
+
+		const xs = nodes.filter(n => n.x !== undefined).map(n => n.x!);
+		const ys = nodes.filter(n => n.y !== undefined).map(n => n.y!);
+		if (xs.length === 0) return;
+
+		const minX = Math.min(...xs) - nodeWidth;
+		const maxX = Math.max(...xs) + nodeWidth;
+		const minY = Math.min(...ys) - nodeHeight;
+		const maxY = Math.max(...ys) + nodeHeight;
+
+		const graphWidth = maxX - minX;
+		const graphHeight = maxY - minY;
+
+		const scale = Math.min(
+			(width * 0.8) / graphWidth,
+			(height * 0.8) / graphHeight,
+			2
+		);
+
+		const centerX = (minX + maxX) / 2;
+		const centerY = (minY + maxY) / 2;
+
+		const transform = d3.zoomIdentity
+			.translate(width / 2 - centerX * scale, height / 2 - centerY * scale)
+			.scale(scale);
+
+		svg.call(zoom.transform, transform);
+	}
+
+	export function navigateTo(graphX: number, graphY: number): void {
+		if (!svg || !zoom) return;
+		const scale = currentTransform.k;
+		const transformNew = d3.zoomIdentity
+			.translate(width / 2 - graphX * scale, height / 2 - graphY * scale)
+			.scale(scale);
+		svg.call(zoom.transform, transformNew);
+	}
+
+	export function getTransform(): d3.ZoomTransform {
+		return currentTransform;
+	}
 </script>
 
-<div class="absolute inset-0">
-    <div
-        bind:this={container}
-        class="absolute inset-0"
-        style="background:{app.theme.canvas.background}"
-    ></div>
-    <!-- Minimap overlay -->
-    <canvas
-        bind:this={minimapCanvas}
-        width={MM_W}
-        height={MM_H}
-        class="absolute bottom-4 right-4 z-10 rounded-lg cursor-crosshair opacity-80 hover:opacity-100 transition-opacity shadow-xl"
-        style="width:{MM_W}px;height:{MM_H}px"
-        onmousedown={onMinimapPointerDown}
-        title="Minimap — click to navigate"
-    ></canvas>
+<div bind:this={containerElement} class="w-full h-full bg-[#0a0f14]">
+	<svg bind:this={svgElement} {width} {height} class="bg-[#0a0f14]">
+		<defs>
+			<filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+				<feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+				<feMerge>
+					<feMergeNode in="coloredBlur"/>
+					<feMergeNode in="SourceGraphic"/>
+				</feMerge>
+			</filter>
+			<pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+				<path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a2530" stroke-width="0.5"/>
+			</pattern>
+		</defs>
+		<rect width="100%" height="100%" fill="url(#grid)" />
+		<g class="graph-container"></g>
+	</svg>
+
+	{#if hoveredNode}
+		<div
+			class="absolute pointer-events-none z-50 bg-[#0a0f14] border border-[#1a2530] rounded-md shadow-lg p-3 max-w-xs"
+			style="left: {tooltipX + 15}px; top: {tooltipY + 15}px;"
+		>
+			<div class="text-xs font-mono text-[#00ff88] font-medium mb-1">{hoveredNode.name}</div>
+			<div class="text-xs font-mono text-[#4a5568] mb-1">UUID: {hoveredNode.id}</div>
+			{#if hoveredNode.description}
+				<div class="text-xs font-mono text-[#e0e0e0] border-t border-[#1a2530] pt-2 mt-2">{hoveredNode.description}</div>
+			{:else}
+				<div class="text-xs font-mono text-[#4a5568] italic border-t border-[#1a2530] pt-2 mt-2">No description</div>
+			{/if}
+		</div>
+	{/if}
 </div>

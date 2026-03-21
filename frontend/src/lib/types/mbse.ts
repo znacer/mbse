@@ -1,80 +1,61 @@
-// ─── MBSE File Schema ─────────────────────────────────────────────────────────
-
-export interface MBSEEntity {
-  name: string;
-  uuid: string;
-  description: string;
-  type: string;
+export interface Entity {
+	name: string;
+	uuid: string;
+	description?: string;
+	type: string;
 }
 
-export interface MBSERelationship {
-  name: string;
-  uuid: string;
-  description: string;
-  source: string;
-  target: string;
+export interface Relationship {
+	name: string;
+	uuid: string;
+	description?: string;
+	source: string;
+	target: string;
 }
 
-export interface MBSEFile {
-  entities: MBSEEntity[];
-  relationships: MBSERelationship[];
+export interface MBSEData {
+	entities: Entity[];
+	relationships: Relationship[];
 }
-
-// ─── Graph Data Structures ─────────────────────────────────────────────────────
 
 export interface GraphNode {
-  id: string;
-  name: string;
-  description: string;
-  type: string;
-  x?: number;
-  y?: number;
-  vx?: number;
-  vy?: number;
-  fx?: number | null;
-  fy?: number | null;
+	id: string;
+	name: string;
+	description?: string;
+	type: string;
+	domain: string;
+	x?: number;
+	y?: number;
+	vx?: number;
+	vy?: number;
+	fx?: number | null;
+	fy?: number | null;
 }
 
 export interface GraphLink {
-  id: string;
-  name: string;
-  description: string;
-  source: string | GraphNode;
-  target: string | GraphNode;
+	id: string;
+	source: string | GraphNode;
+	target: string | GraphNode;
+	name: string;
+	description?: string;
 }
 
-export interface GraphData {
-  nodes: GraphNode[];
-  links: GraphLink[];
+export interface Project {
+	id: string;
+	name: string;
+	description?: string;
+	data: MBSEData;
+	createdAt: string;
+	updatedAt: string;
 }
 
-// ─── UAF Definitions ───────────────────────────────────────────────────────────
-
-export interface UAFStereotype {
-  name: string;
-  id: string;
-  description: string;
-  packageName: string;
-  domain: string;
-  color: string;
+export interface UAFDomain {
+	name: string;
+	color: string;
+	stereotypes: string[];
 }
 
-export type UAFDefinitions = Map<string, UAFStereotype>;
-
-export interface DomainSubpackage {
-  name: string;
-  stereotypeNames: string[];
+export interface UAFData {
+	domains: Map<string, UAFDomain>;
+	stereotypeToDomain: Map<string, string>;
 }
-
-export interface DomainEntry {
-  domain: string;
-  color: string;
-  subpackages: DomainSubpackage[];
-}
-
-// ─── UI State ──────────────────────────────────────────────────────────────────
-
-export type SelectedItem =
-  | { kind: "node"; data: GraphNode }
-  | { kind: "link"; data: GraphLink }
-  | null;
