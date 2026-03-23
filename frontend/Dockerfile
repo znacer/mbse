@@ -1,26 +1,39 @@
-FROM node:20-alpine
+ARG BUILDPLATFORM
 
-WORKDIR /app
 
-# Install build dependencies
+FROM --platform=$BUILDPLATFORM oven/bun:1-alpine AS base
 RUN apk add --no-cache python3 make g++ sqlite
+WORKDIR /usr/src/app
 
-# Copy all files
+# this will cache them and speed up future builds
+FROM base AS install
+RUN mkdir -p /temp/dev
+COPY package.json bun.lock /temp/dev/
+RUN cd /temp/dev && bun install --frozen-lockfile
+
+# install with --production (exclude devDependencies)
+RUN mkdir -p /temp/prod
+COPY package.json bun.lock /temp/prod/
+RUN cd /temp/prod && bun install --frozen-lockfile --production
+
+# copy node_modules from temp directory
+# then copy all (non-ignored) project files into the image
+FROM base AS prerelease
+COPY --from=install /temp/dev/node_modules node_modules
 COPY . .
 
-# Install all dependencies (need devDependencies for build)
-RUN npm install
-
-# Build the application
-RUN npm run build
-
-# Set environment to production
+# # [optional] tests & build
 ENV NODE_ENV=production
-ENV PORT=3000
-ENV HOST=0.0.0.0
+# RUN bun test
+RUN bun --bun run build
 
-# Expose port
-EXPOSE 3000
+# copy production dependencies and source code into final image
+FROM base AS release
+COPY --from=install /temp/prod/node_modules node_modules
+COPY --from=prerelease /usr/src/app/build ./build
+COPY --from=prerelease /usr/src/app/package.json .
 
-# Start the application with preview
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "3000"]
+# run the app
+USER bun
+EXPOSE 3000/tcp
+ENTRYPOINT [ "bun", "./build/index.js" ]
