@@ -119,7 +119,7 @@
                     .id((d) => d.id)
                     .distance(180),
             )
-            .force("charge", d3.forceManyBody().strength(-400))
+            .force("charge", d3.forceManyBody().strength(-10))
             .force("center", d3.forceCenter(0, 0))
             .force(
                 "collision",

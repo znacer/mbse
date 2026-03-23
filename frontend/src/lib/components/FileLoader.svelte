@@ -6,6 +6,7 @@
     import {
         validateMBSEData,
         createEmptyMBSEData,
+        parseLegacyMBSEData,
     } from "$lib/utils/graphTransform.js";
     import type { MBSEData } from "$lib/types/mbse.js";
     import { Upload, FileBraces, X } from "lucide-svelte";
@@ -49,6 +50,10 @@
 
             if (validateMBSEData(data)) {
                 loadedData = data;
+                error = null;
+                projectName = file.name.replace(/\.json$/i, "");
+            } else if (validateMBSEData(parseLegacyMBSEData(data))) {
+                loadedData = parseLegacyMBSEData(data) as MBSEData;
                 error = null;
                 projectName = file.name.replace(/\.json$/i, "");
             } else {

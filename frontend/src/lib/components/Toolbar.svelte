@@ -248,7 +248,7 @@
             </Button>
             {#if showLayoutMenu}
                 <div
-                    class="absolute top-full right-0 mt-1 bg-[#0a0f14] border border-[#1a2530] rounded-md shadow-lg z-30 min-w-[140px]"
+                    class="absolute top-full right-0 mt-1 bg-background border border-border rounded-md shadow-lg z-30 min-w-35"
                 >
                     {#each layoutOptions as option (option.mode)}
                         <button
