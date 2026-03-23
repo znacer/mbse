@@ -46,7 +46,7 @@
     let tooltipX = $state(0);
     let tooltipY = $state(0);
 
-    const nodeWidth = 140;
+    let nodeWidth = 140;
     const nodeHeight = 40;
 
     const DOMAIN_ICONS: Record<string, string> = {
@@ -75,7 +75,12 @@
         return DOMAIN_ICONS[domain] || DOMAIN_ICONS.Parameters;
     }
 
+    let text_color = "#e0e0e0";
     onMount(() => {
+        text_color = getComputedStyle(
+            document.documentElement,
+        ).getPropertyValue("--foreground");
+
         if (!svgElement) return;
 
         svg = d3.select(svgElement);
@@ -391,7 +396,7 @@
             .attr("class", "node-label")
             .attr("x", -nodeWidth / 2 + 36)
             .attr("y", 4)
-            .attr("fill", "#e0e0e0")
+            .attr("fill", text_color)
             .attr("font-size", "11px")
             .attr("font-family", "monospace")
             .attr("font-weight", "500")

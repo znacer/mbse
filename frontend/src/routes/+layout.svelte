@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
-<div class="min-h-screen bg-[#0a0f14]">
+<div class="min-h-screen bg-background">
     <ModeWatcher />
     {@render children()}
 </div>
