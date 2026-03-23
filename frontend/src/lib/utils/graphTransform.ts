@@ -77,21 +77,6 @@ export function parseLegacyMBSEData(data: unknown): {
     });
   }
 
-  //   return {
-  //     uuid: rel.uuid,
-  //     source: source?.uuid || "",
-  //     target: target?.uuid || "",
-  //     name: rel.name,
-  //     description: rel.description,
-  //   };
-  // });
-
-  // relationships = relationships.filter((rel) => {
-  //   const source = obj.entities.find((entity) => entity.uuid === rel.source);
-  //   const target = obj.entities.find((entity) => entity.uuid === rel.target);
-  //   return source && target;
-  // });
-
   obj.relationships = relationships;
 
   return obj as {

@@ -245,7 +245,7 @@
         <ScrollArea class="h-full p-4">
             {#if appState.selectedNode}
                 {#if networkData.nodes.length > 0}
-                    <div class="mb-4">
+                    <section class="mb-4" data-vaul-no-drag>
                         <div class="flex items-center justify-between mb-2">
                             <span
                                 class="text-xs font-medium text-primary/70 font-mono uppercase"
@@ -310,11 +310,17 @@
 
                                 <g transform={miniTransform.toString()}>
                                     {#each networkData.links as link (link.id)}
+                                        {@const source = networkData.nodes.find(
+                                            (n) => n.id === link.source.id,
+                                        )}
+                                        {@const target = networkData.nodes.find(
+                                            (n) => n.id === link.target.id,
+                                        )}
                                         <line
-                                            x1={link.source.x}
-                                            y1={link.source.y}
-                                            x2={link.target.x}
-                                            y2={link.target.y}
+                                            x1={source?.x ?? 0}
+                                            y1={source?.y ?? 0}
+                                            x2={target?.x ?? 0}
+                                            y2={target?.y ?? 0}
                                             stroke="#00ff88"
                                             stroke-opacity={0.4}
                                             stroke-width={0.5}
@@ -441,9 +447,9 @@
                                 >
                             </div>
                         </div>
-                    </div>
+                    </section>
 
-                    <Separator class="bg-[#1a2530]" />
+                    <Separator class="bg-secondary" />
                 {/if}
 
                 <div class="space-y-4">
@@ -453,25 +459,25 @@
                             >Identifier</span
                         >
                         <p
-                            class="text-sm font-mono mt-1 text-[#e0e0e0] bg-[#0d1318] p-2 rounded border border-[#1a2530]"
+                            class="text-sm font-mono mt-1 text-primary bg-secondary p-2 rounded border"
                         >
                             {appState.selectedNode.id}
                         </p>
                     </div>
 
-                    <Separator class="bg-[#1a2530]" />
+                    <Separator class="bg-secondary" />
 
                     <div>
                         <span
                             class="text-xs font-medium text-primary/70 font-mono uppercase"
                             >Classification</span
                         >
-                        <p class="text-sm mt-1 text-[#e0e0e0] font-mono">
+                        <p class="text-sm mt-1 text font-mono">
                             {appState.selectedNode.type}
                         </p>
                     </div>
 
-                    <Separator class="bg-[#1a2530]" />
+                    <Separator class="bg-secondary" />
 
                     <div>
                         <span
@@ -483,20 +489,20 @@
                                 class="w-4 h-3 rounded-sm border"
                                 style="background-color: {domainColor}33; border-color: {domainColor}"
                             ></div>
-                            <span class="text-sm text-[#e0e0e0] font-mono"
+                            <span class="text-sm text font-mono"
                                 >{appState.selectedNode.domain}</span
                             >
                         </div>
                     </div>
 
                     {#if appState.selectedNode.description}
-                        <Separator class="bg-[#1a2530]" />
+                        <Separator class="bg-secondary" />
                         <div>
                             <span
                                 class="text-xs font-medium text-primary/70 font-mono uppercase"
                                 >Description</span
                             >
-                            <p class="text-sm mt-1 text-[#e0e0e0]">
+                            <p class="text-sm mt-1 text">
                                 {appState.selectedNode.description}
                             </p>
                         </div>
@@ -510,13 +516,13 @@
                             >Identifier</span
                         >
                         <p
-                            class="text-sm font-mono mt-1 text-[#e0e0e0] bg-[#0d1318] p-2 rounded border border-[#1a2530]"
+                            class="text-sm font-mono mt-1 text bg-secondary p-2 rounded border"
                         >
                             {appState.selectedLink.id}
                         </p>
                     </div>
 
-                    <Separator class="bg-[#1a2530]" />
+                    <Separator class="bg-secondary" />
 
                     <div>
                         <span
@@ -535,7 +541,7 @@
                         </p>
                     </div>
 
-                    <Separator class="bg-[#1a2530]" />
+                    <Separator class="bg-secondary" />
 
                     <div>
                         <span
@@ -555,7 +561,7 @@
                     </div>
 
                     {#if appState.selectedLink.description}
-                        <Separator class="bg-[#1a2530]" />
+                        <Separator class="bg-secondary" />
                         <div>
                             <span
                                 class="text-xs font-medium text-primary/70 font-mono uppercase"

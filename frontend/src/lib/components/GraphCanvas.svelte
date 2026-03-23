@@ -117,9 +117,9 @@
                 d3
                     .forceLink<D3Node, D3Link>()
                     .id((d) => d.id)
-                    .distance(180),
+                    .distance(500),
             )
-            .force("charge", d3.forceManyBody().strength(-10))
+            .force("charge", d3.forceManyBody().strength(-15))
             .force("center", d3.forceCenter(0, 0))
             .force(
                 "collision",
